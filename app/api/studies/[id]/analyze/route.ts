@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { isApiError, requireCompletedProfile } from "@/lib/api-auth"
 import { generateHeatmap } from "@/lib/gradcam"
-import { classifyChestXray } from "@/lib/huggingface"
+import { classifyChestXray, HuggingFaceInferenceError } from "@/lib/huggingface"
 import { computeRisk } from "@/lib/risk"
 import { generateReport } from "@/lib/reports"
 import { sendHighRiskAlertEmail } from "@/lib/resend"
@@ -9,6 +9,34 @@ import { mapStudyRows } from "@/lib/study-mappers"
 
 type Context = {
   params: Promise<{ id: string }>
+}
+
+type DebugStep = {
+  step: string
+  ok: boolean
+  at: string
+  details?: Record<string, unknown>
+}
+
+function aiEnvStatus() {
+  return {
+    HUGGINGFACE_API_KEY: Boolean(process.env.HUGGINGFACE_API_KEY),
+    HUGGINGFACE_MODEL_ID: process.env.HUGGINGFACE_MODEL_ID || "google/cxr-foundation",
+    GRADCAM_API_URL: Boolean(process.env.GRADCAM_API_URL),
+    OPENAI_API_KEY: Boolean(process.env.OPENAI_API_KEY),
+    OPENAI_REPORT_MODEL: process.env.OPENAI_REPORT_MODEL || "gpt-4o-mini",
+    HUGGINGFACE_TEXT_MODEL_ID: process.env.HUGGINGFACE_TEXT_MODEL_ID || null,
+    RISK_HIGH_THRESHOLD: process.env.RISK_HIGH_THRESHOLD || "70",
+    RESEND_API_KEY: Boolean(process.env.RESEND_API_KEY),
+  }
+}
+
+function errorDebug(error: unknown) {
+  return {
+    name: error instanceof Error ? error.name : "UnknownError",
+    message: error instanceof Error ? error.message : String(error),
+    status: error instanceof HuggingFaceInferenceError ? error.status : undefined,
+  }
 }
 
 function labelForDisplay(label: string) {
@@ -46,11 +74,36 @@ export async function POST(_request: Request, context: Context) {
   const auth = await requireCompletedProfile()
   if (isApiError(auth)) return auth
 
+  const debugSteps: DebugStep[] = []
+  const addStep = (step: string, ok: boolean, details?: Record<string, unknown>) => {
+    debugSteps.push({
+      step,
+      ok,
+      at: new Date().toISOString(),
+      details,
+    })
+  }
+  const debugPayload = (extra?: Record<string, unknown>) => ({
+    route: "POST /api/studies/[id]/analyze",
+    env: aiEnvStatus(),
+    steps: debugSteps,
+    ...extra,
+  })
+
   const { id } = await context.params
+  addStep("auth.profile", true, {
+    userId: auth.userId,
+    organizationId: auth.profile.organization_id,
+    departmentId: auth.profile.department_id,
+    isAdmin: auth.profile.is_admin,
+  })
+
   const access = await canAccessStudy(auth, id)
   if (!access) {
-    return NextResponse.json({ error: "Study not found." }, { status: 404 })
+    addStep("access.study", false, { studyId: id })
+    return NextResponse.json({ error: "Study not found.", debug: debugPayload() }, { status: 404 })
   }
+  addStep("access.study", true, { studyId: id })
 
   const { data: rawStudy, error: studyError } = await (auth.service.from("studies") as any)
     .select("*, patients(external_id, display_name), study_clinical_context(*)")
@@ -59,20 +112,36 @@ export async function POST(_request: Request, context: Context) {
     .single()
 
   if (studyError || !rawStudy) {
-    return NextResponse.json({ error: studyError?.message ?? "Study not found." }, { status: 404 })
+    addStep("database.load_study", false, { message: studyError?.message, studyId: id })
+    return NextResponse.json(
+      { error: studyError?.message ?? "Study not found.", debug: debugPayload() },
+      { status: 404 },
+    )
   }
 
   const study = rawStudy as any
+  addStep("database.load_study", true, {
+    studyId: study.id,
+    storagePath: study.storage_path,
+    mimeType: study.image_mime_type,
+    status: study.status,
+  })
 
   const { data: imageBlob, error: downloadError } = await auth.service.storage
     .from("studies")
     .download(study.storage_path)
 
   if (downloadError || !imageBlob) {
-    return NextResponse.json({ error: downloadError?.message ?? "Could not read archived image." }, { status: 500 })
+    addStep("storage.download_image", false, { message: downloadError?.message, storagePath: study.storage_path })
+    return NextResponse.json(
+      { error: downloadError?.message ?? "Could not read archived image.", debug: debugPayload() },
+      { status: 500 },
+    )
   }
+  addStep("storage.download_image", true, { size: imageBlob.size, type: imageBlob.type })
 
   await auth.service.from("studies").update({ status: "analyzing", analysis_error: null }).eq("id", study.id)
+  addStep("database.mark_analyzing", true)
 
   const startedAt = Date.now()
   const image = Buffer.from(await imageBlob.arrayBuffer())
@@ -86,15 +155,38 @@ export async function POST(_request: Request, context: Context) {
   }
 
   try {
+    addStep("ai.parallel_start", true, {
+      classification: "huggingface",
+      heatmap: process.env.GRADCAM_API_URL ? "gradcam_endpoint" : "skipped_no_url",
+    })
     const [classification, heatmap] = await Promise.all([
       classifyChestXray(image, study.image_mime_type),
       generateHeatmap(image, study.image_mime_type),
     ])
+    addStep("ai.huggingface_classification", true, {
+      modelId: classification.modelId,
+      labels: Object.keys(classification.probabilities),
+      probabilities: classification.probabilities,
+    })
+    addStep("ai.gradcam_heatmap", !heatmap.error, {
+      skipped: heatmap.skipped,
+      hasHeatmap: Boolean(heatmap.heatmap),
+      contentType: heatmap.contentType,
+      error: heatmap.error,
+    })
+
     const risk = computeRisk(classification.probabilities, clinicalContext)
+    addStep("risk.compute", true, risk)
+
     const report = await generateReport({
       probabilities: classification.probabilities,
       risk,
       clinicalContext,
+    })
+    addStep("report.generate", true, {
+      modelUsed: report.modelUsed,
+      fallback: report.modelUsed === "fallback-template",
+      rawPresent: Boolean(report.raw),
     })
 
     let heatmapStoragePath: string | null = null
@@ -109,10 +201,16 @@ export async function POST(_request: Request, context: Context) {
 
       if (heatmapStorageError) {
         heatmapStoragePath = null
+        addStep("storage.upload_heatmap", false, { message: heatmapStorageError.message })
+      } else {
+        addStep("storage.upload_heatmap", true, { heatmapStoragePath })
       }
+    } else {
+      addStep("storage.upload_heatmap", true, { skipped: true })
     }
 
     await auth.service.from("study_findings").delete().eq("study_id", study.id)
+    addStep("database.clear_findings", true)
 
     const findings = Object.entries(classification.probabilities)
       .map(([label, probability]) => ({
@@ -126,9 +224,11 @@ export async function POST(_request: Request, context: Context) {
     if (findings.length > 0) {
       const { error: findingsError } = await auth.service.from("study_findings").insert(findings)
       if (findingsError) {
+        addStep("database.insert_findings", false, { message: findingsError.message })
         throw new Error(findingsError.message)
       }
     }
+    addStep("database.insert_findings", true, { count: findings.length })
 
     const { error: reportError } = await auth.service.from("reports").upsert(
       {
@@ -144,8 +244,10 @@ export async function POST(_request: Request, context: Context) {
     )
 
     if (reportError) {
+      addStep("database.upsert_report", false, { message: reportError.message })
       throw new Error(reportError.message)
     }
+    addStep("database.upsert_report", true)
 
     const nextStatus = risk.score >= highRiskThreshold() ? "critical" : "analyzed"
     const { error: updateError } = await auth.service
@@ -164,8 +266,15 @@ export async function POST(_request: Request, context: Context) {
       .eq("id", study.id)
 
     if (updateError) {
+      addStep("database.update_study_result", false, { message: updateError.message })
       throw new Error(updateError.message)
     }
+    addStep("database.update_study_result", true, {
+      status: nextStatus,
+      riskScore: risk.score,
+      riskLevel: risk.level,
+      analysisDurationMs: Date.now() - startedAt,
+    })
 
     if (risk.score >= highRiskThreshold()) {
       const topFinding = findings[0]?.label ?? "High-risk pattern"
@@ -178,6 +287,7 @@ export async function POST(_request: Request, context: Context) {
         },
         { onConflict: "study_id" },
       )
+      addStep("alerts.upsert", true, { threshold: highRiskThreshold(), riskScore: risk.score })
 
       const [{ data: admins }, { data: organization }] = await Promise.all([
         auth.service
@@ -201,6 +311,9 @@ export async function POST(_request: Request, context: Context) {
           }),
         ),
       )
+      addStep("alerts.email_admins", true, { attempted: admins?.length ?? 0 })
+    } else {
+      addStep("alerts.skip", true, { threshold: highRiskThreshold(), riskScore: risk.score })
     }
 
     const { data: rows, error: viewError } = await (auth.service.from("studies") as any)
@@ -216,18 +329,30 @@ export async function POST(_request: Request, context: Context) {
       .eq("id", study.id)
 
     if (viewError) {
+      addStep("database.reload_view", false, { message: viewError.message })
       throw new Error(viewError.message)
     }
+    addStep("database.reload_view", true)
 
     const [view] = await mapStudyRows(auth.service, rows ?? [])
-    return NextResponse.json({ study: view })
+    return NextResponse.json({ study: view, debug: debugPayload({ durationMs: Date.now() - startedAt }) })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Analysis failed."
+    addStep("analysis.failed", false, errorDebug(error))
     await auth.service
       .from("studies")
       .update({ status: "failed", analysis_error: message, analysis_duration_ms: Date.now() - startedAt })
       .eq("id", study.id)
 
-    return NextResponse.json({ error: message }, { status: 502 })
+    return NextResponse.json(
+      {
+        error: message,
+        debug: debugPayload({
+          durationMs: Date.now() - startedAt,
+          error: errorDebug(error),
+        }),
+      },
+      { status: 502 },
+    )
   }
 }

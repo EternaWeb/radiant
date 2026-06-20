@@ -1,7 +1,22 @@
 "use client"
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react"
-import { ArrowLeft, Check, Contrast, FileText, Layers, Loader2, Ruler, Share2, Sparkles, Upload, ZoomIn } from "lucide-react"
+import {
+  ArrowLeft,
+  Bug,
+  Check,
+  ClipboardList,
+  Contrast,
+  FileText,
+  Layers,
+  Loader2,
+  Ruler,
+  Share2,
+  Sparkles,
+  Upload,
+  X,
+  ZoomIn,
+} from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,6 +36,20 @@ const tools = [
 const inputClass =
   "h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
 
+type DebugEntry = {
+  id: string
+  time: string
+  level: "info" | "success" | "warning" | "error"
+  title: string
+  details?: unknown
+}
+
+type ApiPayload = {
+  study?: StudyView
+  error?: string
+  debug?: unknown
+}
+
 export function PatientAnalysis() {
   const { selectedPatient, setSelectedPatient } = useApp()
   const { studies, loading, error, refresh } = useStudies()
@@ -34,6 +63,8 @@ export function PatientAnalysis() {
   const [fever, setFever] = useState(false)
   const [symptoms, setSymptoms] = useState("")
   const [file, setFile] = useState<File | null>(null)
+  const [debugOpen, setDebugOpen] = useState(false)
+  const [debugEntries, setDebugEntries] = useState<DebugEntry[]>([])
 
   const patient = selectedPatient ?? studies[0] ?? null
 
@@ -41,20 +72,86 @@ export function PatientAnalysis() {
     setApproved(false)
   }, [patient?.id])
 
+  function appendDebug(entry: Omit<DebugEntry, "id" | "time">) {
+    setDebugEntries((current) => [
+      {
+        ...entry,
+        id: crypto.randomUUID(),
+        time: new Date().toLocaleTimeString(),
+      },
+      ...current,
+    ])
+  }
+
+  async function readApiPayload(response: Response): Promise<ApiPayload> {
+    const text = await response.text()
+
+    if (!text) {
+      return {}
+    }
+
+    try {
+      return JSON.parse(text) as ApiPayload
+    } catch {
+      return {
+        error: "API returned a non-JSON response.",
+        debug: {
+          status: response.status,
+          statusText: response.statusText,
+          body: text.slice(0, 2000),
+        },
+      }
+    }
+  }
+
   async function analyzeStudy(study: StudyView) {
     setAnalyzing(true)
     setFormError(null)
+    appendDebug({
+      level: "info",
+      title: "Analysis request started",
+      details: {
+        endpoint: `/api/studies/${study.id}/analyze`,
+        method: "POST",
+        studyId: study.id,
+        patientId: study.patientId,
+        currentStatus: study.rawStatus,
+      },
+    })
 
     const response = await fetch(`/api/studies/${study.id}/analyze`, { method: "POST" })
-    const payload = (await response.json()) as { study?: StudyView; error?: string }
+    const payload = await readApiPayload(response)
 
     setAnalyzing(false)
 
     if (!response.ok || !payload.study) {
       setFormError(payload.error ?? "Analysis failed.")
+      setDebugOpen(true)
+      appendDebug({
+        level: "error",
+        title: "Analysis request failed",
+        details: {
+          status: response.status,
+          statusText: response.statusText,
+          error: payload.error,
+          debug: payload.debug,
+        },
+      })
       return
     }
 
+    appendDebug({
+      level: "success",
+      title: "Analysis request completed",
+      details: {
+        status: response.status,
+        studyId: payload.study.id,
+        risk: payload.study.risk,
+        rawStatus: payload.study.rawStatus,
+        findings: payload.study.findings,
+        hasHeatmap: Boolean(payload.study.heatmapImage),
+      },
+    })
     setSelectedPatient(payload.study)
     await refresh()
   }
@@ -65,10 +162,35 @@ export function PatientAnalysis() {
 
     if (!file) {
       setFormError("Choose a chest X-ray image first.")
+      appendDebug({
+        level: "warning",
+        title: "Upload blocked",
+        details: { reason: "No image file selected." },
+      })
       return
     }
 
     setUploading(true)
+    appendDebug({
+      level: "info",
+      title: "Upload request started",
+      details: {
+        endpoint: "/api/studies/upload",
+        method: "POST",
+        patientId,
+        patientName,
+        file: {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+        },
+        clinicalContext: {
+          spo2: spo2 || null,
+          fever,
+          symptoms: symptoms || null,
+        },
+      },
+    })
     const body = new FormData()
     body.set("image", file)
     body.set("patientId", patientId)
@@ -83,15 +205,36 @@ export function PatientAnalysis() {
       method: "POST",
       body,
     })
-    const payload = (await response.json()) as { study?: StudyView; error?: string }
+    const payload = await readApiPayload(response)
 
     setUploading(false)
 
     if (!response.ok || !payload.study) {
       setFormError(payload.error ?? "Upload failed.")
+      setDebugOpen(true)
+      appendDebug({
+        level: "error",
+        title: "Upload request failed",
+        details: {
+          status: response.status,
+          statusText: response.statusText,
+          error: payload.error,
+          debug: payload.debug,
+        },
+      })
       return
     }
 
+    appendDebug({
+      level: "success",
+      title: "Upload request completed",
+      details: {
+        status: response.status,
+        studyId: payload.study.id,
+        patientId: payload.study.patientId,
+        imageUrlPresent: Boolean(payload.study.image),
+      },
+    })
     setSelectedPatient(payload.study)
     setFile(null)
     await refresh()
@@ -110,6 +253,7 @@ export function PatientAnalysis() {
         uploading={uploading}
         analyzing={analyzing}
         error={formError}
+        debugCount={debugEntries.length}
         onSubmit={handleUpload}
         onPatientIdChange={setPatientId}
         onPatientNameChange={setPatientName}
@@ -117,6 +261,14 @@ export function PatientAnalysis() {
         onFeverChange={setFever}
         onSymptomsChange={setSymptoms}
         onFileChange={setFile}
+        onDebugOpen={() => setDebugOpen(true)}
+      />
+
+      <DebugModal
+        open={debugOpen}
+        entries={debugEntries}
+        onClose={() => setDebugOpen(false)}
+        onClear={() => setDebugEntries([])}
       />
 
       {error && <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
@@ -260,6 +412,7 @@ function UploadCard({
   uploading,
   analyzing,
   error,
+  debugCount,
   onSubmit,
   onPatientIdChange,
   onPatientNameChange,
@@ -267,6 +420,7 @@ function UploadCard({
   onFeverChange,
   onSymptomsChange,
   onFileChange,
+  onDebugOpen,
 }: {
   patientId: string
   patientName: string
@@ -277,6 +431,7 @@ function UploadCard({
   uploading: boolean
   analyzing: boolean
   error: string | null
+  debugCount: number
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onPatientIdChange: (value: string) => void
   onPatientNameChange: (value: string) => void
@@ -284,10 +439,26 @@ function UploadCard({
   onFeverChange: (value: boolean) => void
   onSymptomsChange: (value: string) => void
   onFileChange: (value: File | null) => void
+  onDebugOpen: () => void
 }) {
   return (
     <Card>
       <CardContent className="p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold">Upload & AI Analysis</h3>
+            <p className="text-xs text-muted-foreground">Use Debug when the AI pipeline fails or returns unexpected data.</p>
+          </div>
+          <Button type="button" variant="outline" onClick={onDebugOpen} data-icon="inline-start">
+            <Bug data-icon="inline-start" />
+            Debug
+            {debugCount > 0 && (
+              <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                {debugCount}
+              </span>
+            )}
+          </Button>
+        </div>
         <form onSubmit={onSubmit} className="grid gap-3 lg:grid-cols-[1fr_1fr_120px_120px_1.2fr_auto] lg:items-end">
           <Field label="Patient ID">
             <input value={patientId} onChange={(event) => onPatientIdChange(event.target.value)} required placeholder="PT-10421" className={inputClass} />
@@ -320,6 +491,100 @@ function UploadCard({
         {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
       </CardContent>
     </Card>
+  )
+}
+
+function DebugModal({
+  open,
+  entries,
+  onClose,
+  onClear,
+}: {
+  open: boolean
+  entries: DebugEntry[]
+  onClose: () => void
+  onClear: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+
+  if (!open) return null
+
+  const serialized = JSON.stringify(entries, null, 2)
+
+  async function copyDebugLog() {
+    await navigator.clipboard.writeText(serialized)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <Bug className="h-5 w-5 text-primary" /> AI Pipeline Debug
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Send the latest failed entry when you share the errors. No API keys are logged here.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={copyDebugLog} data-icon="inline-start">
+              <ClipboardList data-icon="inline-start" />
+              {copied ? "Copied" : "Copy log"}
+            </Button>
+            <Button type="button" variant="outline" onClick={onClear}>
+              Clear
+            </Button>
+            <Button type="button" variant="ghost" onClick={onClose} size="icon">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid min-h-0 flex-1 gap-0 overflow-hidden lg:grid-cols-[340px_1fr]">
+          <div className="overflow-y-auto border-b border-border p-4 lg:border-b-0 lg:border-r">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Timeline ({entries.length})
+            </p>
+            {entries.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                No debug events yet. Upload or analyze a study to populate this log.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {entries.map((entry) => (
+                  <div key={entry.id} className="rounded-lg border border-border bg-card p-3">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          entry.level === "error"
+                            ? "bg-destructive/15 text-destructive"
+                            : entry.level === "success"
+                              ? "bg-success/15 text-success"
+                              : entry.level === "warning"
+                                ? "bg-warning/15 text-warning"
+                                : "bg-primary/15 text-primary"
+                        }`}
+                      >
+                        {entry.level}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{entry.time}</span>
+                    </div>
+                    <p className="text-sm font-semibold">{entry.title}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="min-h-0 overflow-y-auto bg-black p-4 text-xs text-green-100">
+            <pre className="whitespace-pre-wrap break-words">{serialized || "[]"}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
