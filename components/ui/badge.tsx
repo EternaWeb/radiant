@@ -6,6 +6,7 @@ const variants = {
   warning: "bg-warning/15 text-warning border-warning/20",
   danger: "bg-destructive/15 text-destructive border-destructive/20",
   muted: "bg-muted text-muted-foreground border-border",
+  neutral: "bg-muted text-muted-foreground border-border",
 }
 
 export function Badge({

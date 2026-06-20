@@ -5,6 +5,7 @@ import { ScanLine, Hospital, Ambulance, BarChart3, Check, ArrowRight, type Lucid
 import { Button } from "@/components/ui/button"
 import { roles } from "@/lib/data"
 import { useApp } from "@/lib/app-context"
+import type { ClinicalRole } from "@/lib/supabase/types"
 
 const icons: Record<string, LucideIcon> = {
   scan: ScanLine,
@@ -15,16 +16,16 @@ const icons: Record<string, LucideIcon> = {
 
 export function RoleSelect() {
   const { setStage, setRole } = useApp()
-  const [selected, setSelected] = useState<string | null>("radiologist")
+  const [selected, setSelected] = useState<ClinicalRole>("radiologist")
 
   function next() {
-    if (selected) setRole(selected)
+    setRole(selected)
     setStage("setup")
   }
 
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-4xl flex-col justify-center px-6 py-12">
-      <Stepper step={1} />
+      <Stepper step={2} />
       <h1 className="mt-8 text-balance text-3xl font-bold tracking-tight md:text-4xl">Choose your role</h1>
       <p className="mt-2 text-muted-foreground">
         We&apos;ll tailor the dashboard, alerts, and tools to how you work.
@@ -33,11 +34,12 @@ export function RoleSelect() {
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         {roles.map((role) => {
           const Icon = icons[role.icon]
-          const active = selected === role.id
+          const roleId = role.id as ClinicalRole
+          const active = selected === roleId
           return (
             <button
               key={role.id}
-              onClick={() => setSelected(role.id)}
+              onClick={() => setSelected(roleId)}
               className={`group relative flex flex-col gap-3 rounded-2xl border p-5 text-left transition-all ${
                 active
                   ? "border-primary bg-primary/5 ring-2 ring-primary/30"
@@ -80,7 +82,7 @@ export function RoleSelect() {
 }
 
 export function Stepper({ step }: { step: number }) {
-  const labels = ["Role", "Hospital Setup", "AI Readiness"]
+  const labels = ["Profile", "Role", "Hospital Setup"]
   return (
     <div className="flex items-center gap-2">
       {labels.map((label, i) => {

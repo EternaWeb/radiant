@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Heart,
   Brain,
@@ -16,11 +16,40 @@ import {
   X,
   Send,
   Check,
+  Shield,
   type LucideIcon,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { orgDepartments, departmentRoles, type Department, type StaffMember } from "@/lib/data"
+import { departmentRoles } from "@/lib/data"
+import { parseClinicalRole } from "@/lib/roles"
+import { useApp } from "@/lib/app-context"
+
+type StaffStatus = "Online" | "On call" | "Off duty"
+
+type DirectoryMember = {
+  id: string
+  name: string
+  role: string
+  email: string
+  phone: string
+  shift: string
+  status: StaffStatus
+  isAdmin: boolean
+  workspaceRole: string
+  department: string
+  hospital: string
+}
+
+type DirectoryDepartment = {
+  id: string
+  name: string
+  icon: string
+  lead: string
+  location: string
+  hospital: string
+  staff: DirectoryMember[]
+}
 
 const icons: Record<string, LucideIcon> = {
   heart: Heart,
@@ -29,32 +58,64 @@ const icons: Record<string, LucideIcon> = {
   scan: ScanLine,
 }
 
-const statusTone: Record<StaffMember["status"], "success" | "warning" | "neutral"> = {
+const statusTone: Record<StaffStatus, "success" | "warning" | "muted"> = {
   Online: "success",
   "On call": "warning",
-  "Off duty": "neutral",
+  "Off duty": "muted",
 }
 
 export function Departments() {
-  const [departments, setDepartments] = useState<Department[]>(orgDepartments)
+  const { isAdmin } = useApp()
+  const [departments, setDepartments] = useState<DirectoryDepartment[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const active = departments.find((d) => d.id === activeId) ?? null
+  async function loadDepartments() {
+    setLoading(true)
+    setError(null)
+    const response = await fetch("/api/departments")
+    const result = await response.json()
+    setLoading(false)
 
-  function kick(deptId: string, staffId: string) {
-    setDepartments((prev) =>
-      prev.map((d) => (d.id === deptId ? { ...d, staff: d.staff.filter((s) => s.id !== staffId) } : d)),
-    )
+    if (!response.ok) {
+      setError(result.error ?? "Could not load departments.")
+      return
+    }
+
+    setDepartments(result.departments)
   }
 
-  function invite(deptId: string, member: StaffMember) {
-    setDepartments((prev) =>
-      prev.map((d) => (d.id === deptId ? { ...d, staff: [...d.staff, member] } : d)),
-    )
+  useEffect(() => {
+    loadDepartments()
+  }, [])
+
+  async function kick(staffId: string) {
+    const response = await fetch(`/api/departments/members/${staffId}`, {
+      method: "DELETE",
+    })
+    const result = await response.json()
+
+    if (!response.ok) {
+      setError(result.error ?? "Could not remove member.")
+      return
+    }
+
+    await loadDepartments()
   }
+
+  const active = departments.find((department) => department.id === activeId) ?? null
 
   if (active) {
-    return <DepartmentDetail department={active} onBack={() => setActiveId(null)} onKick={kick} onInvite={invite} />
+    return (
+      <DepartmentDetail
+        department={active}
+        isAdmin={isAdmin}
+        onBack={() => setActiveId(null)}
+        onKick={kick}
+        onInvite={loadDepartments}
+      />
+    )
   }
 
   return (
@@ -66,27 +127,36 @@ export function Departments() {
         </p>
       </div>
 
+      {loading && <p className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Loading departments...</p>}
+      {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">{error}</p>}
+
+      {!loading && !error && departments.length === 0 && (
+        <p className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
+          No departments have been created for this workspace yet.
+        </p>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {departments.map((dept) => {
-          const Icon = icons[dept.icon] ?? ScanLine
-          const online = dept.staff.filter((s) => s.status === "Online").length
+        {departments.map((department) => {
+          const Icon = icons[department.icon] ?? ScanLine
+          const online = department.staff.filter((staff) => staff.status === "Online").length
           return (
             <button
-              key={dept.id}
-              onClick={() => setActiveId(dept.id)}
+              key={department.id}
+              onClick={() => setActiveId(department.id)}
               className="group rounded-xl border border-border bg-card p-5 text-left transition-all hover:border-primary/50 hover:bg-muted/40 hover:shadow-lg hover:shadow-primary/5"
             >
               <div className="flex items-start justify-between">
                 <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-muted text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                   <Icon className="h-5 w-5" />
                 </div>
-                <Badge variant="neutral">
-                  <Users className="h-3 w-3" /> {dept.staff.length}
+                <Badge variant="muted">
+                  <Users className="h-3 w-3" /> {department.staff.length}
                 </Badge>
               </div>
-              <p className="mt-4 text-lg font-semibold">{dept.name}</p>
-              <p className="text-xs text-muted-foreground">Lead · {dept.lead}</p>
-              <p className="mt-3 text-xs text-muted-foreground">{dept.location}</p>
+              <p className="mt-4 text-lg font-semibold">{department.name}</p>
+              <p className="text-xs text-muted-foreground">Lead · {department.lead}</p>
+              <p className="mt-3 text-xs text-muted-foreground">{department.location}</p>
               <div className="mt-3 inline-flex items-center gap-1.5 text-xs text-success">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" />
                 {online} online now
@@ -101,14 +171,16 @@ export function Departments() {
 
 function DepartmentDetail({
   department,
+  isAdmin,
   onBack,
   onKick,
   onInvite,
 }: {
-  department: Department
+  department: DirectoryDepartment
+  isAdmin: boolean
   onBack: () => void
-  onKick: (deptId: string, staffId: string) => void
-  onInvite: (deptId: string, member: StaffMember) => void
+  onKick: (staffId: string) => void
+  onInvite: () => void
 }) {
   const [modalOpen, setModalOpen] = useState(false)
   const Icon = icons[department.icon] ?? ScanLine
@@ -135,12 +207,14 @@ function DepartmentDetail({
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setModalOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <UserPlus className="h-4 w-4" /> Add member
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <UserPlus className="h-4 w-4" /> Add member
+            </button>
+          )}
         </CardContent>
       </Card>
 
@@ -149,51 +223,62 @@ function DepartmentDetail({
           <div className="mb-4 flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
             <h3 className="font-semibold">Team members</h3>
-            <Badge variant="neutral">{department.staff.length}</Badge>
+            <Badge variant="muted">{department.staff.length}</Badge>
           </div>
 
           {department.staff.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              No members in this department yet. Add one to get started.
+              No accepted members in this department yet. Admins can send invites to add users.
             </p>
           ) : (
             <div className="flex flex-col gap-3">
-              {department.staff.map((s) => (
+              {department.staff.map((staff) => (
                 <div
-                  key={s.id}
-                  className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-background p-4 transition-colors hover:bg-muted/40"
+                  key={staff.id}
+                  className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-border bg-background p-4 transition-colors hover:bg-muted/40"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">
-                      {s.name.split(" ").map((n) => n[0]).slice(0, 2).join("")}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{s.name}</p>
-                        <Badge variant={statusTone[s.status]}>{s.status}</Badge>
+                  <div className="min-w-48 flex-1">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">
+                        {staff.name
+                          .split(" ")
+                          .map((name) => name[0])
+                          .slice(0, 2)
+                          .join("")}
                       </div>
-                      <p className="text-xs text-muted-foreground">{s.role}</p>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium">{staff.name}</p>
+                          <Badge variant={statusTone[staff.status]}>{staff.status}</Badge>
+                          {staff.isAdmin && (
+                            <Badge variant="default">
+                              <Shield className="h-3 w-3" /> Admin
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{staff.role}</p>
+                      </div>
                     </div>
+
+                    <dl className="mt-4 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                      <Info label="User ID" value={staff.id} />
+                      <Info label="Email" value={staff.email} icon={Mail} />
+                      <Info label="Phone" value={staff.phone} icon={Phone} />
+                      <Info label="Workspace role" value={staff.workspaceRole} icon={Clock} />
+                      <Info label="Department" value={staff.department} />
+                      <Info label="Hospital" value={staff.hospital} />
+                      <Info label="Is admin" value={staff.isAdmin ? "Yes" : "No"} />
+                    </dl>
                   </div>
 
-                  <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1.5">
-                      <Mail className="h-3.5 w-3.5" /> {s.email}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <Phone className="h-3.5 w-3.5" /> {s.phone}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5" /> {s.shift}
-                    </span>
-                  </div>
-
-                  <button
-                    onClick={() => onKick(department.id, s.id)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-destructive transition-colors hover:border-destructive hover:bg-destructive/10"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" /> Remove
-                  </button>
+                  {isAdmin && !staff.isAdmin && (
+                    <button
+                      onClick={() => onKick(staff.id)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-destructive transition-colors hover:border-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Remove
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -205,9 +290,28 @@ function DepartmentDetail({
         <InviteModal
           department={department}
           onClose={() => setModalOpen(false)}
-          onInvite={(member) => onInvite(department.id, member)}
+          onInvite={onInvite}
         />
       )}
+    </div>
+  )
+}
+
+function Info({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string
+  value: string
+  icon?: LucideIcon
+}) {
+  return (
+    <div>
+      <dt className="inline-flex items-center gap-1.5">
+        {Icon && <Icon className="h-3.5 w-3.5" />} {label}
+      </dt>
+      <dd className="mt-0.5 break-all font-medium text-foreground">{value}</dd>
     </div>
   )
 }
@@ -217,31 +321,42 @@ function InviteModal({
   onClose,
   onInvite,
 }: {
-  department: Department
+  department: DirectoryDepartment
   onClose: () => void
-  onInvite: (member: StaffMember) => void
+  onInvite: () => void
 }) {
   const [role, setRole] = useState(departmentRoles[0])
   const [email, setEmail] = useState("")
   const [sent, setSent] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 
-  function handleSend() {
+  async function handleSend() {
     if (!valid) return
-    const namePart = email.split("@")[0].replace(/[._]/g, " ")
-    const member: StaffMember = {
-      id: `inv-${Date.now()}`,
-      name: namePart.replace(/\b\w/g, (c) => c.toUpperCase()),
-      role,
-      email,
-      phone: "Pending",
-      shift: "Pending",
-      status: "Off duty",
+    setSending(true)
+    setError(null)
+    const response = await fetch("/api/invites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        departmentId: department.id,
+        clinicalRole: parseClinicalRole(role),
+      }),
+    })
+    const result = await response.json()
+    setSending(false)
+
+    if (!response.ok) {
+      setError(result.error ?? "Could not send invite.")
+      return
     }
+
     setSent(true)
     setTimeout(() => {
-      onInvite(member)
+      onInvite()
       onClose()
     }, 1200)
   }
@@ -253,7 +368,7 @@ function InviteModal({
         <div className="flex items-start justify-between">
           <div>
             <h3 className="text-lg font-semibold">Invite to {department.name}</h3>
-            <p className="text-sm text-muted-foreground">An invite email will be sent (demo only).</p>
+            <p className="text-sm text-muted-foreground">A secure invite email will be sent with a login link.</p>
           </div>
           <button
             onClick={onClose}
@@ -279,17 +394,17 @@ function InviteModal({
             <div>
               <label className="mb-1.5 block text-sm font-medium">Role</label>
               <div className="grid grid-cols-2 gap-2">
-                {departmentRoles.map((r) => (
+                {departmentRoles.map((candidate) => (
                   <button
-                    key={r}
-                    onClick={() => setRole(r)}
+                    key={candidate}
+                    onClick={() => setRole(candidate)}
                     className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
-                      role === r
+                      role === candidate
                         ? "border-primary bg-primary/10 text-foreground"
                         : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
                     }`}
                   >
-                    {r}
+                    {candidate}
                   </button>
                 ))}
               </div>
@@ -303,11 +418,13 @@ function InviteModal({
                 id="invite-email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(event) => setEmail(event.target.value)}
                 placeholder="name@hospital.org"
                 className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
               />
             </div>
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
 
             <div className="flex justify-end gap-2 pt-1">
               <button
@@ -318,10 +435,10 @@ function InviteModal({
               </button>
               <button
                 onClick={handleSend}
-                disabled={!valid}
+                disabled={!valid || sending}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Send className="h-4 w-4" /> Send invite
+                <Send className="h-4 w-4" /> {sending ? "Sending..." : "Send invite"}
               </button>
             </div>
           </div>

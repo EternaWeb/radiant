@@ -31,27 +31,66 @@ function Field({
 }
 
 export function HospitalSetup() {
-  const { setStage, hospital, setHospital } = useApp()
+  const { setStage, hospital, setHospital, fullName, role, invite, completeAuthState } = useApp()
   const [name, setName] = useState(hospital.name)
   const [department, setDepartment] = useState(hospital.department)
   const [pacs, setPacs] = useState("Sectra PACS Cloud")
   const [dicom, setDicom] = useState("dicom://pacs.stvincent.org:11112")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  function next() {
+  async function next() {
+    if (!role) {
+      setError("Choose a role before connecting your hospital.")
+      return
+    }
+
+    setLoading(true)
+    setError(null)
     setHospital({ name: name || "St. Vincent Medical Center", department: department || "Radiology" })
-    setStage("readiness")
+
+    const endpoint = invite ? `/api/invites/${invite.token}/accept` : "/api/onboarding/complete"
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fullName,
+        clinicalRole: role,
+        hospitalName: name,
+        departmentName: department,
+      }),
+    })
+    const result = await response.json()
+
+    if (!response.ok) {
+      setError(result.error ?? "Could not complete onboarding.")
+      setLoading(false)
+      return
+    }
+
+    completeAuthState(result)
   }
 
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-5xl flex-col justify-center px-6 py-12">
-      <Stepper step={2} />
+      <Stepper step={3} />
       <h1 className="mt-8 text-balance text-3xl font-bold tracking-tight md:text-4xl">Connect your hospital</h1>
       <p className="mt-2 text-muted-foreground">Link your PACS and DICOM endpoint so the AI engine can stream studies.</p>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_320px]">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Hospital Name" value={name} onChange={setName} placeholder="e.g. St. Vincent Medical Center" />
-          <Field label="Department" value={department} onChange={setDepartment} placeholder="e.g. Radiology" />
+          <Field
+            label="Hospital Name"
+            value={name}
+            onChange={invite ? () => undefined : setName}
+            placeholder="e.g. St. Vincent Medical Center"
+          />
+          <Field
+            label="Department"
+            value={department}
+            onChange={invite ? () => undefined : setDepartment}
+            placeholder="e.g. Radiology"
+          />
           <Field label="PACS Connection" value={pacs} onChange={setPacs} placeholder="PACS provider" />
           <Field label="DICOM Endpoint" value={dicom} onChange={setDicom} placeholder="dicom://host:port" />
         </div>
@@ -70,10 +109,11 @@ export function HospitalSetup() {
         <Button variant="ghost" size="lg" onClick={() => setStage("role")}>
           Back
         </Button>
-        <Button size="lg" className="h-11 px-6 text-base" onClick={next} data-icon="inline-end">
-          Connect System <ArrowRight data-icon="inline-end" />
+        <Button size="lg" className="h-11 px-6 text-base" onClick={next} disabled={loading} data-icon="inline-end">
+          {loading ? "Saving..." : "Connect System"} <ArrowRight data-icon="inline-end" />
         </Button>
       </div>
+      {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
     </div>
   )
 }

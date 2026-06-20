@@ -1,11 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { Database, Cpu, Bell, LogOut } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Database, Cpu, Bell, LogOut, UserRound, Save } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useApp } from "@/lib/app-context"
+import { formatClinicalRole } from "@/lib/roles"
+import { createClient } from "@/lib/supabase/client"
 
 function Toggle({ defaultOn = true }: { defaultOn?: boolean }) {
   const [on, setOn] = useState(defaultOn)
@@ -23,10 +26,72 @@ function Toggle({ defaultOn = true }: { defaultOn?: boolean }) {
 }
 
 export function SettingsView() {
-  const { hospital, role, setStage } = useApp()
+  const router = useRouter()
+  const { hospital, role, profile, setProfile, resetAuthState } = useApp()
+  const [phone, setPhone] = useState(profile?.phone ?? "")
+  const [saving, setSaving] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+
+  async function savePhone() {
+    setSaving(true)
+    setMessage(null)
+    const response = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone }),
+    })
+    const result = await response.json()
+    setSaving(false)
+
+    if (!response.ok) {
+      setMessage(result.error ?? "Could not save phone number.")
+      return
+    }
+
+    setProfile(result.profile)
+    setMessage("Phone number saved.")
+  }
+
+  async function signOut() {
+    setSigningOut(true)
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    resetAuthState()
+    router.refresh()
+  }
 
   return (
     <div className="flex max-w-3xl flex-col gap-5">
+      <Card>
+        <CardContent className="p-5">
+          <h3 className="mb-4 flex items-center gap-2 font-semibold">
+            <UserRound className="h-4 w-4 text-primary" /> Profile
+          </h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Row label="User ID" value={profile?.id ?? "Pending"} />
+            <Row label="Full Name" value={profile?.full_name ?? "Pending"} />
+            <Row label="Email" value={profile?.email ?? "Pending"} />
+            <Row label="Workspace Role" value={profile?.workspace_role ?? "participant"} />
+          </div>
+          <label className="mt-4 flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-muted-foreground">Phone</span>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                placeholder="+1 (555) 000-0000"
+                className="h-10 flex-1 rounded-lg border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-primary"
+              />
+              <Button onClick={savePhone} disabled={saving} className="h-10 px-4" data-icon="inline-start">
+                <Save data-icon="inline-start" /> {saving ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </label>
+          {message && <p className="mt-3 text-sm text-muted-foreground">{message}</p>}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardContent className="p-5">
           <h3 className="mb-4 flex items-center gap-2 font-semibold">
@@ -35,7 +100,8 @@ export function SettingsView() {
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <Row label="Hospital" value={hospital.name} />
             <Row label="Department" value={hospital.department} />
-            <Row label="Role" value={role ?? "Radiologist"} />
+            <Row label="Role" value={formatClinicalRole(role)} />
+            <Row label="Is admin" value={profile?.is_admin ? "Yes" : "No"} />
             <Row label="PACS" value="Sectra PACS Cloud" status />
           </dl>
         </CardContent>
@@ -58,10 +124,11 @@ export function SettingsView() {
         variant="destructive"
         size="lg"
         className="h-10 self-start px-5"
-        onClick={() => setStage("welcome")}
+        onClick={signOut}
+        disabled={signingOut}
         data-icon="inline-start"
       >
-        <LogOut data-icon="inline-start" /> Sign out
+        <LogOut data-icon="inline-start" /> {signingOut ? "Signing out..." : "Sign out"}
       </Button>
     </div>
   )

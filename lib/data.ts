@@ -191,10 +191,8 @@ export type Department = {
 
 export const departmentRoles = [
   "Radiologist",
-  "Department Physician",
-  "Resident",
-  "Nurse",
-  "Technologist",
+  "Emergency Doctor",
+  "Department Doctor",
   "Administrator",
 ]
 
@@ -291,21 +289,21 @@ export const roles = [
     description: "Full imaging suite, AI overlays, and diagnostic reporting.",
   },
   {
-    id: "physician",
-    title: "Department Physician",
+    id: "department_doctor",
+    title: "Department Doctor",
     icon: "hospital",
     description: "Patient-centric views and cross-department collaboration.",
   },
   {
-    id: "emergency",
-    title: "Emergency Team",
+    id: "emergency_doctor",
+    title: "Emergency Doctor",
     icon: "ambulance",
     description: "Real-time critical alerts and rapid triage workflows.",
   },
   {
-    id: "operations",
-    title: "Operations & Analytics",
+    id: "administrator",
+    title: "Administrator",
     icon: "chart",
-    description: "Throughput metrics, accuracy tracking, and reporting.",
+    description: "Workspace setup, team management, and department oversight.",
   },
 ]

@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { useApp, type Section } from "@/lib/app-context"
 import { alerts } from "@/lib/data"
+import { formatClinicalRole } from "@/lib/roles"
 import { DashboardHome } from "./sections/home"
 import { PatientAnalysis } from "./sections/patient-analysis"
 import { PacsArchive } from "./sections/pacs-archive"
@@ -48,7 +49,9 @@ const titles: Record<Section, string> = {
 }
 
 export function Shell() {
-  const { section, setSection } = useApp()
+  const { section, setSection, profile } = useApp()
+  const displayName = profile?.full_name ?? "Radiant user"
+  const displayRole = formatClinicalRole(profile?.clinical_role)
 
   return (
     <div className="flex min-h-svh bg-background">
@@ -91,12 +94,12 @@ export function Shell() {
         <div className="mt-4 hidden items-center gap-2 rounded-lg bg-sidebar-accent p-2 lg:flex">
           <img
             src="/avatar-doctor.png"
-            alt="Dr. Smith"
+            alt={displayName}
             className="h-8 w-8 rounded-full object-cover"
           />
           <div className="min-w-0">
-            <p className="truncate text-xs font-semibold">Dr. Alex Smith</p>
-            <p className="truncate text-[11px] text-muted-foreground">Radiologist</p>
+            <p className="truncate text-xs font-semibold">{displayName}</p>
+            <p className="truncate text-[11px] text-muted-foreground">{displayRole}</p>
           </div>
         </div>
       </aside>
@@ -116,7 +119,7 @@ export function Shell() {
             <Bell className="h-4 w-4" />
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive" />
           </button>
-          <img src="/avatar-doctor.png" alt="Dr. Smith" className="h-9 w-9 rounded-full object-cover" />
+          <img src="/avatar-doctor.png" alt={displayName} className="h-9 w-9 rounded-full object-cover" />
         </header>
 
         <main className="flex-1 p-5 md:p-6">

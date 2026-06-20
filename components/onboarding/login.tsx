@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Activity, ArrowLeft, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useApp } from "@/lib/app-context"
+import { createClient } from "@/lib/supabase/client"
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -31,11 +32,25 @@ function GoogleIcon({ className }: { className?: string }) {
 export function Login() {
   const { setStage } = useApp()
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  function signIn() {
+  async function signIn() {
     setLoading(true)
-    // Demo only: always proceeds regardless of account.
-    setTimeout(() => setStage("role"), 1100)
+    setError(null)
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin
+    const supabase = createClient()
+    const { error: signInError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${appUrl}/auth/callback?next=/`,
+      },
+    })
+
+    if (signInError) {
+      setError(signInError.message)
+      setLoading(false)
+    }
   }
 
   return (
@@ -78,11 +93,8 @@ export function Login() {
             Google is the only supported sign-in method for this environment.
             By continuing you agree to the platform terms and HIPAA data handling policy.
           </p>
+          {error && <p className="mt-3 text-center text-xs text-destructive">{error}</p>}
         </div>
-
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Demo environment — sign-in always succeeds.
-        </p>
       </div>
     </div>
   )
