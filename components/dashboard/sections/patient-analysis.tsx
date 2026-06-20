@@ -3,10 +3,15 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react"
 import {
   ChevronRight,
+  ClipboardList,
   Download,
+  FilePlus,
   FileText,
+  FolderOpen,
   Image as ImageIcon,
   Loader2,
+  Mail,
+  MapPin,
   Maximize2,
   MessageSquare,
   MoreHorizontal,
@@ -15,15 +20,19 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  UserRound,
+  Users,
   X,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { UserAvatar } from "@/components/user-avatar"
 import { useApp } from "@/lib/app-context"
 import { formatFindingLabel, formatFindingZone } from "@/lib/lung-zones"
+import { formatClinicalRole } from "@/lib/roles"
 import { useCases } from "@/lib/use-cases"
-import type { CaseImageLabel } from "@/lib/supabase/types"
+import type { CaseAssignmentRole, CaseImageLabel, ClinicalRole } from "@/lib/supabase/types"
 import type { CaseRecordView, CaseView } from "@/lib/cases"
 import { BreadcrumbNav } from "../breadcrumb-nav"
 
@@ -48,6 +57,28 @@ type ApiPayload<T> = T & {
   debug?: unknown
 }
 
+type DirectoryMember = {
+  id: string
+  name: string
+  avatarUrl: string | null
+  role: string
+  clinicalRole: ClinicalRole
+  email: string
+  phone: string
+  department: string
+}
+
+type DirectoryDepartment = {
+  id: string
+  name: string
+  staff: DirectoryMember[]
+}
+
+type DepartmentsResponse = {
+  departments?: DirectoryDepartment[]
+  error?: string
+}
+
 export function PatientAnalysis() {
   const { selectedCase, selectedRecordId, setSelectedCase, setSelectedRecordId, openCase, isAdmin } = useApp()
   const { cases, loading, error, refresh } = useCases()
@@ -56,6 +87,7 @@ export function PatientAnalysis() {
   const [showCaseForm, setShowCaseForm] = useState(false)
   const [showRecordForm, setShowRecordForm] = useState(false)
   const [showManageModal, setShowManageModal] = useState(false)
+  const [showAssigneesModal, setShowAssigneesModal] = useState(false)
 
   const activeCase = selectedCase ? cases.find((caseView) => caseView.id === selectedCase.id) ?? selectedCase : null
   const selectedRecord =
@@ -246,25 +278,80 @@ export function PatientAnalysis() {
     }
   }
 
+  async function assignStaff(profileId: string, role: CaseAssignmentRole) {
+    if (!activeCase) return
+    setBusy(true)
+    setFormError(null)
+
+    try {
+      const response = await fetch(`/api/cases/${activeCase.id}/assignments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileId, role }),
+      })
+      const payload = await readPayload<{ case?: CaseView }>(response)
+      if (!response.ok || !payload.case) throw new Error(payload.error ?? "Could not assign staff.")
+
+      setSelectedCase(payload.case)
+      await refresh({ silent: true })
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Could not assign staff.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeStaff(profileId: string, role: CaseAssignmentRole) {
+    if (!activeCase) return
+    setBusy(true)
+    setFormError(null)
+
+    try {
+      const response = await fetch(`/api/cases/${activeCase.id}/assignments`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileId, role }),
+      })
+      const payload = await readPayload<{ case?: CaseView }>(response)
+      if (!response.ok || !payload.case) throw new Error(payload.error ?? "Could not remove staff assignment.")
+
+      setSelectedCase(payload.case)
+      await refresh({ silent: true })
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Could not remove staff assignment.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <BreadcrumbNav
-          items={[
-            { label: "Cases", onClick: () => setSelectedCase(null) },
-            ...(activeCase
-              ? [
-                  { label: activeCase.client.name, onClick: () => setSelectedRecordId(null) },
-                  { label: activeCase.title, onClick: () => setSelectedRecordId(null) },
-                  ...activeCase.records.map((record) => ({
-                    label: `Record #${record.recordNumber}`,
-                    onClick: () => setSelectedRecordId(record.id),
-                  })),
-                ]
-              : []),
-          ]}
-        />
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="rounded-2xl border border-border bg-card p-3 shadow-sm">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <BreadcrumbNav
+              items={[
+                { label: "Cases", icon: FolderOpen, onClick: () => setSelectedCase(null) },
+                ...(activeCase
+                  ? [
+                      { label: activeCase.client.name, icon: UserRound, onClick: () => setSelectedRecordId(null) },
+                      { label: activeCase.title, icon: ClipboardList, onClick: () => setSelectedRecordId(null) },
+                      ...activeCase.records.map((record) => ({
+                        label: `Record #${record.recordNumber}`,
+                        icon: FileText,
+                        onClick: () => setSelectedRecordId(record.id),
+                      })),
+                    ]
+                  : []),
+              ]}
+            />
+            {activeCase && (
+              <Button type="button" variant="accent" onClick={() => setShowRecordForm(true)} data-icon="inline-start">
+                <FilePlus data-icon="inline-start" /> Add record
+              </Button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 xl:justify-end">
           {!activeCase && (
             <Button type="button" variant="accent" onClick={() => setShowCaseForm(true)} data-icon="inline-start">
               <Plus data-icon="inline-start" /> New Case
@@ -272,15 +359,12 @@ export function PatientAnalysis() {
           )}
           {activeCase && (
             <>
-              <Button type="button" variant="accent" onClick={() => setShowRecordForm(true)} data-icon="inline-start">
-                <Plus data-icon="inline-start" /> New Record
-              </Button>
               <Button type="button" variant="outline" data-icon="inline-start">
                 <MessageSquare data-icon="inline-start" /> Comment
               </Button>
               {selectedRecord && (
                 <Button type="button" onClick={() => downloadReport(selectedRecord)} data-icon="inline-start">
-                  <Download data-icon="inline-start" /> Get Report
+                  <Download data-icon="inline-start" /> Report
                 </Button>
               )}
             </>
@@ -290,6 +374,7 @@ export function PatientAnalysis() {
               <MoreHorizontal />
             </Button>
           )}
+          </div>
         </div>
       </div>
 
@@ -305,6 +390,7 @@ export function PatientAnalysis() {
               caseView={activeCase}
               record={selectedRecord}
               onAnalyze={() => analyzeRecord(selectedRecord.id).then(() => reloadCase(activeCase.id))}
+              onViewAssignees={() => setShowAssigneesModal(true)}
             />
           ) : (
             <Card>
@@ -327,6 +413,16 @@ export function PatientAnalysis() {
           onClose={() => setShowManageModal(false)}
           onDeleteCase={deleteCase}
           onDeleteClient={deleteClient}
+        />
+      )}
+      {activeCase && showAssigneesModal && (
+        <AssignStaffModal
+          caseView={activeCase}
+          isAdmin={isAdmin}
+          busy={busy}
+          onClose={() => setShowAssigneesModal(false)}
+          onAssign={assignStaff}
+          onRemove={removeStaff}
         />
       )}
     </div>
@@ -686,16 +782,33 @@ function RecordAnalysis({
   caseView,
   record,
   onAnalyze,
+  onViewAssignees,
 }: {
   caseView: CaseView
   record: CaseRecordView
   onAnalyze: () => Promise<unknown>
+  onViewAssignees: () => void
 }) {
   const [analyzing, setAnalyzing] = useState(false)
   const [focusedImageId, setFocusedImageId] = useState(record.images[0]?.id ?? null)
   const [expandedImage, setExpandedImage] = useState<CaseRecordView["images"][number] | null>(null)
   const focusedImage = record.images.find((image) => image.id === focusedImageId) ?? record.images[0] ?? null
   const assigned = caseView.assignments.slice(0, 3)
+  const symptoms =
+    [
+      record.clinicalChecks.fever ? "Fever" : null,
+      record.clinicalChecks.cough ? "Cough" : null,
+      record.clinicalChecks.shortnessOfBreath ? "Shortness of breath" : null,
+      record.clinicalChecks.chestPain ? "Chest pain" : null,
+      record.clinicalChecks.additionalSymptoms || null,
+    ]
+      .filter(Boolean)
+      .join(", ") || "-"
+  const findingsSummary =
+    record.findings
+      .map((finding) => `${formatFindingLabel(finding.label)} (${formatFindingZone(finding.zone)}, ${finding.confidence}%)`)
+      .join("; ") || "Awaiting AI findings."
+  const topFinding = record.findings[0]
 
   useEffect(() => {
     setFocusedImageId(record.images[0]?.id ?? null)
@@ -714,28 +827,47 @@ function RecordAnalysis({
   return (
     <div className="rounded-xl bg-[#F4F4F4] p-6 font-mono text-[12px] text-foreground">
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex -space-x-2">
-            {assigned.map((assignment, index) => (
-              <span
+        <div className="min-w-0 flex-1">
+          <div className="mb-3 flex items-center justify-between gap-3 font-sans">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Staff assigned</p>
+              <p className="text-sm font-semibold">
+                {caseView.assignments.length} clinician{caseView.assignments.length === 1 ? "" : "s"} on this case
+              </p>
+            </div>
+            <button type="button" className="text-xs font-medium text-accent-blue hover:text-accent-blue/80" onClick={onViewAssignees}>
+              View all
+            </button>
+          </div>
+          <div className="grid max-w-3xl gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {assigned.map((assignment) => (
+              <button
                 key={assignment.id}
-                className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#F4F4F4] bg-accent-blue text-[10px] font-bold text-white"
-                title={assignment.name}
+                type="button"
+                onClick={onViewAssignees}
+                className="flex min-w-0 items-center gap-3 rounded-xl border border-border bg-white p-3 text-left font-sans transition-colors hover:border-accent-blue/40 hover:bg-accent-blue/5"
               >
-                {assignment.name.charAt(0).toUpperCase()}
-              </span>
+                <UserAvatar name={assignment.name} src={assignment.avatarUrl} size="sm" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{assignment.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {formatClinicalRole(assignment.clinicalRole)} · {assignment.departmentName}
+                  </p>
+                </div>
+              </button>
             ))}
             {assigned.length === 0 && (
-              <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#F4F4F4] bg-muted text-[10px] font-bold text-muted-foreground">
-                ?
-              </span>
+              <button
+                type="button"
+                onClick={onViewAssignees}
+                className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-white p-3 text-left font-sans text-muted-foreground transition-colors hover:border-accent-blue/40 hover:text-foreground"
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                  <Users className="h-4 w-4" />
+                </div>
+                <span className="text-sm font-medium">Assign staff to this case</span>
+              </button>
             )}
-          </div>
-          <div>
-            <p className="font-semibold">+{caseView.assignments.length} Staff Assigned</p>
-            <button type="button" className="text-[10px] text-muted-foreground hover:text-foreground">
-              View All
-            </button>
           </div>
         </div>
         {record.rawStatus !== "analyzed" && record.rawStatus !== "critical" && (
@@ -762,18 +894,7 @@ function RecordAnalysis({
               <DetailRow label="Patient Surname" value={caseView.client.lastName} />
               <DetailRow label="Age" value={String(caseView.client.age)} />
               <DetailRow label="SpO2" value={String(record.clinicalChecks.spo2 ?? "-")} />
-              <DetailRow
-                label="Symptoms"
-                value={[
-                  record.clinicalChecks.fever ? "Fever" : null,
-                  record.clinicalChecks.cough ? "Cough" : null,
-                  record.clinicalChecks.shortnessOfBreath ? "Shortness of breath" : null,
-                  record.clinicalChecks.chestPain ? "Chest pain" : null,
-                  record.clinicalChecks.additionalSymptoms || null,
-                ]
-                  .filter(Boolean)
-                  .join(", ") || "-"}
-              />
+              <DetailRow label="Symptoms" value={symptoms} />
             </dl>
 
             <div className="my-6 h-px max-w-xl bg-foreground/70" />
@@ -793,25 +914,43 @@ function RecordAnalysis({
             </dl>
           </section>
 
-          <section className="max-w-3xl font-sans">
-            <div className="mb-4 flex items-end justify-between gap-4">
-              <h3 className="text-xl font-semibold">Report</h3>
+          <section className="max-w-4xl font-sans">
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">AI diagnostic draft</p>
+                <h3 className="text-2xl font-semibold">Report</h3>
+              </div>
               <div className="font-mono text-right text-[10px] uppercase text-muted-foreground">
                 <p>Main Model</p>
                 <p>{record.date}</p>
               </div>
             </div>
-            <div className="rounded-xl bg-white p-5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Summary</p>
-              <p className="mt-2 max-w-2xl text-base leading-7 text-foreground">{record.summary}</p>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <ReportStat title="Risk score" value={`${record.risk}%`} detail={record.status} variant={riskVariant(record.risk)} />
+              <ReportStat
+                title="Top finding"
+                value={topFinding ? formatFindingLabel(topFinding.label) : "Pending"}
+                detail={topFinding ? `${formatFindingZone(topFinding.zone)} · ${topFinding.confidence}%` : "Awaiting analysis"}
+                variant={topFinding ? "default" : "muted"}
+              />
+              <ReportStat title="Clinical context" value={record.clinicalChecks.spo2 ? `${record.clinicalChecks.spo2}% SpO2` : "No SpO2"} detail={symptoms} variant="muted" />
             </div>
-            <div className="mt-6 grid gap-6 text-sm leading-7 md:grid-cols-2">
-              <ReportBlock title="Findings" body={record.findings.map((finding) => `${formatFindingLabel(finding.label)} (${formatFindingZone(finding.zone)}, ${finding.confidence}%)`).join("; ") || "Awaiting AI findings."} />
+
+            <div className="mt-4 rounded-2xl border border-accent-blue/20 bg-white p-6 shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-accent-blue" />
+                <p className="text-xs font-semibold uppercase tracking-wide text-accent-blue">AI Summary</p>
+              </div>
+              <p className="max-w-3xl text-lg leading-8 text-foreground">{record.summary}</p>
+            </div>
+
+            <div className="mt-4 grid gap-4 text-sm leading-7 md:grid-cols-2">
+              <ReportBlock title="Findings" body={findingsSummary} />
               <ReportBlock title="Timeline comparison" body={record.comparison} />
               <ReportBlock title="Recommendation" body={record.recommendation} />
-              <ReportBlock title="Risk" body={`${record.risk}% - ${record.status}`} />
+              <ReportBlock title="Review note" body={record.disclaimer} muted />
             </div>
-            <p className="mt-6 text-xs leading-5 text-muted-foreground">{record.disclaimer}</p>
           </section>
         </div>
 
@@ -930,6 +1069,173 @@ function ImagePreviewModal({
   )
 }
 
+function AssignStaffModal({
+  caseView,
+  isAdmin,
+  busy,
+  onClose,
+  onAssign,
+  onRemove,
+}: {
+  caseView: CaseView
+  isAdmin: boolean
+  busy: boolean
+  onClose: () => void
+  onAssign: (profileId: string, role: CaseAssignmentRole) => Promise<void>
+  onRemove: (profileId: string, role: CaseAssignmentRole) => Promise<void>
+}) {
+  const [departments, setDepartments] = useState<DirectoryDepartment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [profileId, setProfileId] = useState("")
+  const [role, setRole] = useState<CaseAssignmentRole>("primary")
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadStaff() {
+      setLoading(true)
+      setError(null)
+      try {
+        const response = await fetch("/api/departments")
+        const payload = (await response.json()) as DepartmentsResponse
+        if (!response.ok) throw new Error(payload.error ?? "Could not load staff directory.")
+        if (!cancelled) setDepartments(payload.departments ?? [])
+      } catch (error) {
+        if (!cancelled) setError(error instanceof Error ? error.message : "Could not load staff directory.")
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    loadStaff()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const staff = departments
+    .flatMap((department) => department.staff.map((member) => ({ ...member, department: member.department || department.name })))
+    .filter((member, index, all) => all.findIndex((candidate) => candidate.id === member.id) === index)
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const assignedKeys = new Set(caseView.assignments.map((assignment) => `${assignment.profileId}:${assignment.assignmentRole}`))
+  const selectedAlreadyAssigned = profileId ? assignedKeys.has(`${profileId}:${role}`) : false
+  const selectedStaff = staff.find((member) => member.id === profileId)
+
+  async function handleAssign() {
+    if (!profileId || selectedAlreadyAssigned) return
+    await onAssign(profileId, role)
+    setProfileId("")
+  }
+
+  return (
+    <Modal title="Assigned staff" onClose={onClose} wide>
+      <div className="flex flex-col gap-5">
+        <div className="grid gap-3 md:grid-cols-2">
+          {caseView.assignments.length > 0 ? (
+            caseView.assignments.map((assignment) => (
+              <div key={assignment.id} className="rounded-xl border border-border bg-background p-4">
+                <div className="flex items-start gap-3">
+                  <UserAvatar name={assignment.name} src={assignment.avatarUrl} size="lg" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold">{assignment.name}</p>
+                      <Badge variant={assignment.assignmentRole === "emergency" ? "danger" : "default"}>
+                        {assignment.assignmentRole === "emergency" ? "Emergency" : "Primary"}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">{formatClinicalRole(assignment.clinicalRole)}</p>
+                    <div className="mt-3 flex flex-col gap-1.5 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5" /> {assignment.departmentName}
+                      </span>
+                      {assignment.email && (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Mail className="h-3.5 w-3.5" /> {assignment.email}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-4 w-full"
+                    onClick={() => onRemove(assignment.profileId, assignment.assignmentRole)}
+                    disabled={busy}
+                    data-icon="inline-start"
+                  >
+                    <Trash2 data-icon="inline-start" /> Remove assignment
+                  </Button>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="rounded-xl border border-dashed border-border bg-background p-5 text-sm text-muted-foreground md:col-span-2">
+              No staff are assigned to this case yet.
+            </div>
+          )}
+        </div>
+
+        {isAdmin && (
+          <div className="rounded-xl border border-border bg-muted/40 p-4">
+            <div className="mb-3">
+              <h4 className="font-semibold">Add staff</h4>
+              <p className="text-sm text-muted-foreground">Choose a member from the hospital directory and assign their case role.</p>
+            </div>
+            {loading ? (
+              <p className="text-sm text-muted-foreground">Loading staff directory...</p>
+            ) : error ? (
+              <p className="text-sm text-destructive">{error}</p>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-[1fr_160px_auto]">
+                <select value={profileId} onChange={(event) => setProfileId(event.target.value)} className={inputClass}>
+                  <option value="">Select staff member</option>
+                  {staff.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name} - {member.department} - {member.role}
+                    </option>
+                  ))}
+                </select>
+                <select value={role} onChange={(event) => setRole(event.target.value as CaseAssignmentRole)} className={inputClass}>
+                  <option value="primary">Primary</option>
+                  <option value="emergency">Emergency</option>
+                </select>
+                <Button
+                  type="button"
+                  variant="accent"
+                  onClick={handleAssign}
+                  disabled={!profileId || selectedAlreadyAssigned || busy}
+                  data-icon="inline-start"
+                >
+                  <Plus data-icon="inline-start" /> Add
+                </Button>
+              </div>
+            )}
+            {selectedStaff && (
+              <div className="mt-3 flex items-center gap-3 rounded-lg bg-background p-3 text-sm">
+                <UserAvatar name={selectedStaff.name} src={selectedStaff.avatarUrl} size="sm" />
+                <div>
+                  <p className="font-medium">{selectedStaff.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedStaff.department} · {selectedStaff.role}
+                  </p>
+                </div>
+              </div>
+            )}
+            {selectedAlreadyAssigned && (
+              <p className="mt-2 text-xs text-muted-foreground">This staff member already has that assignment role.</p>
+            )}
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
 function ManageCaseModal({
   caseView,
   busy,
@@ -987,11 +1293,33 @@ function CheckBox({ label, checked, onChange }: { label: string; checked: boolea
   )
 }
 
-function ReportBlock({ title, body }: { title: string; body: string }) {
+function ReportStat({
+  title,
+  value,
+  detail,
+  variant,
+}: {
+  title: string
+  value: string
+  detail: string
+  variant: "default" | "success" | "warning" | "danger" | "muted" | "neutral"
+}) {
   return (
-    <div>
+    <div className="rounded-xl border border-border bg-white p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+        <Badge variant={variant}>{value}</Badge>
+      </div>
+      <p className="line-clamp-2 text-sm text-foreground">{detail}</p>
+    </div>
+  )
+}
+
+function ReportBlock({ title, body, muted = false }: { title: string; body: string; muted?: boolean }) {
+  return (
+    <div className="rounded-xl border border-border bg-white p-4">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
-      <p className="text-foreground/90">{body}</p>
+      <p className={muted ? "text-xs leading-6 text-muted-foreground" : "text-foreground/90"}>{body}</p>
     </div>
   )
 }

@@ -112,7 +112,9 @@ const CASE_RECORD_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
 For case records, you may receive multiple labeled images from the same clinical visit. Treat the image label as clinical orientation context only; do not invent anatomy that is not visible.
 
 Also use the provided client background, current clinical checks, doctor notes, and prior case record summaries to produce a timeline-aware comparison.
-The summary must always be easy to read: use 2-3 short plain-language sentences that explain the record, the main concern, and the next workflow step.
+The summary must always be easy to read and clinically grounded: write 4-6 clear sentences in polished clinical prose that explain the visible evidence, the most important finding, the risk interpretation, timeline context, and the next workflow step.
+Do not invent diagnoses, measurements, devices, or findings that are not supported by the image labels, current findings, clinical checks, notes, or prior-record context.
+If the evidence is limited or normal, say so directly and explain what still needs clinician review rather than adding unsupported abnormalities.
 
 Output JSON schema:
 {
@@ -422,7 +424,7 @@ export async function analyzeCaseRecordWithGptVision(input: GptVisionCaseRecordI
 
   return requestVisionAnalysis({
     systemPrompt: CASE_RECORD_SYSTEM_PROMPT,
-    maxTokens: Number(process.env.OPENAI_VISION_MAX_TOKENS ?? "1200"),
+    maxTokens: Number(process.env.OPENAI_VISION_MAX_TOKENS ?? "1600"),
     content,
   })
 }

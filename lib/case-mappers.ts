@@ -45,7 +45,11 @@ type RecordRow = CaseTimelineRecord & {
 }
 
 type AssignmentRow = CaseAssignment & {
-  profiles?: Pick<Profile, "id" | "full_name" | "email" | "clinical_role"> | null
+  profiles?:
+    | (Pick<Profile, "id" | "full_name" | "email" | "avatar_url" | "clinical_role" | "department_id"> & {
+        departments?: Pick<DepartmentRecord, "id" | "name"> | null
+      })
+    | null
 }
 
 type AlertRow = {
@@ -157,7 +161,10 @@ export async function mapRecordRow(
     image: topImage(images),
     heatmapImage: null,
     findings,
-    summary: record.summary ?? report?.summary ?? "Record created. Analysis has not generated a report yet.",
+    summary:
+      record.summary ??
+      report?.summary ??
+      "This record has been created and is ready for AI-assisted review. Once analysis runs, this section will summarize the visible evidence, risk context, and recommended workflow step without replacing clinician interpretation.",
     comparison: report?.comparison ?? "No prior record on file.",
     recommendation: report?.recommendation ?? "Run AI analysis to generate a recommendation draft.",
     disclaimer: report?.disclaimer ?? "AI-assisted draft. Not a clinical diagnosis; radiologist review is required.",
@@ -170,7 +177,10 @@ function mapAssignment(row: AssignmentRow): CaseAssignmentView {
     profileId: row.profile_id,
     name: row.profiles?.full_name ?? "Unassigned clinician",
     email: row.profiles?.email ?? "",
+    avatarUrl: row.profiles?.avatar_url ?? null,
     clinicalRole: row.profiles?.clinical_role ?? "department_doctor",
+    departmentId: row.profiles?.department_id ?? null,
+    departmentName: row.profiles?.departments?.name ?? "Unassigned department",
     assignmentRole: row.role,
   }
 }

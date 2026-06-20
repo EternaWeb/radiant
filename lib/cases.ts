@@ -79,7 +79,10 @@ export type CaseAssignmentView = {
   profileId: string
   name: string
   email: string
+  avatarUrl: string | null
   clinicalRole: ClinicalRole
+  departmentId: string | null
+  departmentName: string
   assignmentRole: CaseAssignmentRole
 }
 
