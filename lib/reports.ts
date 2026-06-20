@@ -1,5 +1,7 @@
-import type { ChestXrayProbabilities } from "./huggingface"
+import { CHEXPERT_LABELS } from "./chexpert-attention"
 import type { ClinicalContextInput, RiskResult } from "./risk"
+
+type ProbabilityMap = Record<string, number | undefined>
 
 export type GeneratedReport = {
   summary: string
@@ -11,19 +13,27 @@ export type GeneratedReport = {
 }
 
 type ReportInput = {
-  probabilities: ChestXrayProbabilities
+  probabilities: ProbabilityMap
   risk: RiskResult
   clinicalContext?: ClinicalContextInput
 }
 
 const DISCLAIMER = "AI-assisted draft. Not a clinical diagnosis; radiologist review is required."
 
-function formatProbabilityList(probabilities: ChestXrayProbabilities) {
+function formatProbabilityList(probabilities: ProbabilityMap) {
   const entries = Object.entries(probabilities)
     .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
     .map(([label, probability]) => `${label}: ${Math.round((probability ?? 0) * 100)}%`)
 
   return entries.length > 0 ? entries.join(", ") : "No supported chest X-ray labels returned."
+}
+
+function topFindings(probabilities: ProbabilityMap, limit = 3) {
+  return Object.entries(probabilities)
+    .filter(([, probability]) => typeof probability === "number")
+    .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
+    .slice(0, limit)
+    .map(([label, probability]) => `${label}: ${Math.round((probability ?? 0) * 100)}%`)
 }
 
 function fallbackReport({ probabilities, risk, clinicalContext }: ReportInput): GeneratedReport {
@@ -55,6 +65,12 @@ Do not provide a final diagnosis. Use cautious language and say radiologist revi
 
 Chest X-ray model probabilities:
 ${formatProbabilityList(probabilities)}
+
+Top 3 model findings:
+${topFindings(probabilities).join(", ") || "No supported findings returned."}
+
+Supported CheXpert labels:
+${CHEXPERT_LABELS.join(", ")}
 
 Risk score: ${risk.score}
 Risk level: ${risk.level}

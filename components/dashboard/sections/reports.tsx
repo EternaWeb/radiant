@@ -4,6 +4,7 @@ import { FileText, ChevronRight, Sparkles } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
 import { useApp } from "@/lib/app-context"
+import { formatFindingLabel, formatFindingZone } from "@/lib/lung-zones"
 import { useStudies } from "@/lib/use-studies"
 
 const statusVariant = { Critical: "danger", Pending: "warning", Reviewed: "success" } as const
@@ -30,6 +31,11 @@ export function Reports() {
                 <Badge variant={statusVariant[p.status]}>{p.status}</Badge>
               </div>
               <p className="mt-0.5 truncate text-sm text-muted-foreground">{p.summary}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {p.findings[0]
+                  ? `Top zone: ${formatFindingLabel(p.findings[0].label)} in ${formatFindingZone(p.findings[0].zone)}`
+                  : "Awaiting GPT-4o Vision findings"}
+              </p>
             </div>
             <div className="hidden items-center gap-3 sm:flex">
               <Badge variant={riskVariant(p.risk)}>{p.risk}%</Badge>

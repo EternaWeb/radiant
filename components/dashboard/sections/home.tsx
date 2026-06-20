@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, Minus, ArrowRight, Activity } from "lucide-re
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
 import { useApp } from "@/lib/app-context"
+import { findingsToHeatmapBoxes } from "@/lib/lung-zones"
 import { useAlerts, useStudies } from "@/lib/use-studies"
 import { HeatmapViewer } from "../heatmap-viewer"
 
@@ -27,6 +28,7 @@ export function DashboardHome() {
   const { alerts } = useAlerts()
   const recent = studies.slice(0, 4)
   const showcase = studies.find((p) => p.risk >= 70) ?? studies[0] ?? null
+  const showcaseBoxes = showcase ? findingsToHeatmapBoxes(showcase.findings) : []
   const completed = studies.filter((study) => study.rawStatus === "analyzed" || study.rawStatus === "critical")
   const highRiskCount = studies.filter((study) => study.risk >= 70).length
   const kpis: Kpi[] = [
@@ -133,7 +135,7 @@ export function DashboardHome() {
             </div>
             {showcase ? (
               <>
-                <HeatmapViewer image={showcase.image} heatmapImage={showcase.heatmapImage} />
+                <HeatmapViewer image={showcase.image} heatmapImage={showcase.heatmapImage} boxes={showcaseBoxes} />
                 <button
                   onClick={() => openPatient(showcase)}
                   className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background py-2.5 text-sm font-medium transition-colors hover:bg-muted"
@@ -143,7 +145,7 @@ export function DashboardHome() {
               </>
             ) : (
               <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                Upload a chest X-ray to preview Grad-CAM heatmaps here.
+                Upload a chest X-ray to preview GPT lung-zone overlays here.
               </div>
             )}
           </CardContent>

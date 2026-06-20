@@ -5,6 +5,7 @@ import { Search, ChevronRight } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
 import { useApp } from "@/lib/app-context"
+import { formatFindingLabel, formatFindingZone } from "@/lib/lung-zones"
 import { useStudies } from "@/lib/use-studies"
 
 const filters = ["All", "X-Ray", "MRI", "CT", "Ultrasound"] as const
@@ -62,6 +63,7 @@ export function PacsArchive() {
                   <th className="px-5 py-3 font-medium">Name</th>
                   <th className="px-5 py-3 font-medium">Date</th>
                   <th className="px-5 py-3 font-medium">Modality</th>
+                  <th className="px-5 py-3 font-medium">Top finding</th>
                   <th className="px-5 py-3 font-medium">Risk</th>
                   <th className="px-5 py-3 font-medium">Status</th>
                   <th className="px-5 py-3" />
@@ -78,6 +80,11 @@ export function PacsArchive() {
                     <td className="px-5 py-3.5 font-medium">{p.name}</td>
                     <td className="px-5 py-3.5 text-muted-foreground">{p.date}</td>
                     <td className="px-5 py-3.5 text-muted-foreground">{p.modality}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">
+                      {p.findings[0]
+                        ? `${formatFindingLabel(p.findings[0].label)} · ${formatFindingZone(p.findings[0].zone)}`
+                        : "Awaiting analysis"}
+                    </td>
                     <td className="px-5 py-3.5">
                       <Badge variant={riskVariant(p.risk)}>{p.risk}%</Badge>
                     </td>
@@ -91,7 +98,7 @@ export function PacsArchive() {
                 ))}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-muted-foreground">
+                    <td colSpan={8} className="px-5 py-10 text-center text-muted-foreground">
                       {loading ? "Loading studies..." : "No studies match your filters."}
                     </td>
                   </tr>

@@ -1,258 +1,158 @@
 # Radiant AI Setup
 
-Follow this guide to configure the AI parts of Radiant on Vercel:
+Radiant now uses GPT-4o Vision for chest X-ray workflow support. Vercel calls OpenAI, stores structured results in Supabase, renders lung-zone overlays in the frontend, and sends high-risk alerts through Resend.
 
-- Hugging Face image classification
-- Optional Hugging Face Grad-CAM heatmap endpoint
-- OpenAI report generation
+This is not a medical diagnostic tool. It is an AI-assisted imaging workflow and decision support system.
 
-Radiant does not host ML models inside Vercel. Vercel calls external AI APIs and stores the results in Supabase.
+## 1. OpenAI Vision
 
-## 1. Hugging Face Account
-
-1. Go to [Hugging Face](https://huggingface.co/).
-2. Create an account or sign in.
-3. Open **Settings > Access Tokens**.
-4. Create a new token.
-5. Choose a token type that can call Inference APIs.
-6. Copy the token.
-
-Add this to Vercel:
+Create an OpenAI API key with access to GPT-4o Vision and add it to Vercel:
 
 ```env
-HUGGINGFACE_API_KEY=your_hugging_face_token
+OPENAI_API_KEY=your_openai_key
+OPENAI_VISION_MODEL=gpt-4o
+OPENAI_VISION_TIMEOUT_MS=60000
+OPENAI_VISION_MAX_TOKENS=800
 ```
 
-## 2. Hugging Face Classification Model
+`OPENAI_VISION_MODEL` can be changed later if the app should use a newer compatible vision model. The analysis route keeps temperature at `0.1` and asks for JSON only.
 
-Radiant uses Hugging Face as a probability engine only. It returns labels and probabilities, not diagnoses.
+## 2. Supabase Schema
 
-Set the model ID in Vercel:
-
-```env
-HUGGINGFACE_MODEL_ID=google/cxr-foundation
-```
-
-By default Radiant calls:
+Run the Supabase migrations in order so Radiant can store GPT output:
 
 ```text
-https://api-inference.huggingface.co/models/google/cxr-foundation
+001_auth_and_orgs.sql
+002_imaging.sql
+003_gpt_vision_analysis.sql
 ```
 
-If that classic Inference API URL does not work for the model, create a dedicated Hugging Face Inference Endpoint or Space and set:
+The GPT migration adds:
+
+- `studies.summary`
+- `studies.raw_findings`
+- `study_findings.zone`
+
+Findings use these zones:
+
+```text
+left_upper
+left_lower
+right_upper
+right_lower
+center
+```
+
+## 3. Supabase Storage
+
+Radiant stores uploaded images in the private `studies` bucket. The app reads the image with the Supabase service role during analysis, then creates signed URLs for frontend display.
+
+Required Vercel variables:
 
 ```env
-HUGGINGFACE_INFERENCE_URL=https://your-endpoint-url
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 ```
 
-You can also increase the request timeout:
+## 4. High-Risk Alerts
 
-```env
-HUGGINGFACE_TIMEOUT_MS=45000
-```
-
-Expected output shape:
-
-```json
-{
-  "pneumonia": 0.92,
-  "effusion": 0.13,
-  "cardiomegaly": 0.41
-}
-```
-
-Radiant then computes the risk score itself.
-
-## 3. Grad-CAM Heatmap Endpoint
-
-Grad-CAM should run outside Vercel, usually as a Hugging Face Space.
-
-1. In Hugging Face, open **Spaces**.
-2. Create a new Space.
-3. Choose **Gradio** or **Docker**.
-4. Build an endpoint that accepts:
-
-```json
-{
-  "image": "data:image/png;base64,..."
-}
-```
-
-5. Return either raw PNG bytes or JSON with one of these fields:
-
-```json
-{
-  "heatmap": "base64_png_here"
-}
-```
-
-Also accepted:
-
-```json
-{
-  "image": "base64_png_here"
-}
-```
-
-or:
-
-```json
-{
-  "data": "base64_png_here"
-}
-```
-
-6. Copy the public Space API URL.
-7. Add it to Vercel:
-
-```env
-GRADCAM_API_URL=https://your-space.hf.space/predict
-```
-
-If this is not configured, Radiant still works, but the heatmap overlay is skipped.
-
-## 4. OpenAI Account
-
-1. Go to [OpenAI Platform](https://platform.openai.com/).
-2. Create an account or sign in.
-3. Open **API keys**.
-4. Create a new secret key.
-5. Copy the key.
-
-Add this to Vercel:
-
-```env
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_REPORT_MODEL=gpt-4o-mini
-```
-
-Radiant uses OpenAI only to draft the structured report from:
-
-- Hugging Face probabilities
-- Radiant risk score
-- optional clinical context like SpO2, fever, and symptoms
-
-The report is AI-assisted and not a clinical diagnosis.
-
-## 5. Optional Hugging Face Text Model Instead Of OpenAI
-
-If you do not want to use OpenAI, you can use a Hugging Face text model for reports.
-
-Add this to Vercel:
-
-```env
-HUGGINGFACE_TEXT_MODEL_ID=mistralai/Mistral-7B-Instruct-v0.3
-```
-
-Keep `HUGGINGFACE_API_KEY` configured.
-
-If both OpenAI and Hugging Face text generation are configured, Radiant tries OpenAI first.
-
-## 6. Risk Threshold
-
-Set the high-risk threshold:
+Studies with `risk_score >= 70` create an alert and email organization admins.
 
 ```env
 RISK_HIGH_THRESHOLD=70
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=Radiant <alerts@yourdomain.com>
+NEXT_PUBLIC_APP_URL=https://your-vercel-domain.vercel.app
 ```
 
-When a study reaches this threshold, Radiant:
+Make sure `RESEND_FROM_EMAIL` uses a verified sender domain in Resend.
 
-- marks the study as critical
-- creates an alert
-- emails workspace admins through Resend
+## 5. Analysis Contract
 
-## 7. Demo Seed Images
+The backend sends uploaded X-rays to GPT-4o Vision and validates this JSON shape:
 
-Radiant includes an admin-only seed endpoint:
-
-```http
-POST /api/studies/seed
+```json
+{
+  "risk_score": 82,
+  "risk_level": "HIGH",
+  "findings": [
+    {
+      "label": "lung_opacity",
+      "zone": "right_lower",
+      "confidence": 0.86
+    }
+  ],
+  "summary": "Right lower lung zone opacity with elevated risk score. Radiologist review is recommended."
+}
 ```
 
-By default it uses public NIH chest X-ray PNG samples.
+Allowed labels:
 
-To use your own public images, add this to Vercel:
+```text
+pneumonia
+pleural_effusion
+pneumothorax
+lung_opacity
+cardiomegaly
+normal
+```
+
+The app stores:
+
+- `risk_score`, `risk_level`, `summary`, and `raw_findings` on `studies`
+- zone-aware records in `study_findings`
+- a report summary in `reports`
+- a high-risk row in `alerts` when threshold is met
+
+## 6. Frontend Output
+
+The dashboard renders:
+
+- PACS Archive from Supabase studies
+- Patient Analysis upload and analyze flow
+- Reports from GPT summaries
+- Alerts from real high-risk rows
+- Viewer overlays from fixed lung zones
+
+Heatmap overlays are intentionally frontend-generated rectangles based on GPT zones. Radiant no longer requires HuggingFace, CheXpert, or Grad-CAM services.
+
+## 7. Vercel Checklist
+
+Set these variables in Vercel:
 
 ```env
-SEED_CHEST_XRAY_URLS=https://example.com/xray1.png,https://example.com/xray2.png
-```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 
-Use direct PNG, JPEG, or WebP URLs.
-
-## 8. Final Vercel Environment Variables
-
-Add these in **Vercel > Project > Settings > Environment Variables**:
-
-```env
-HUGGINGFACE_API_KEY=
-HUGGINGFACE_MODEL_ID=google/cxr-foundation
-HUGGINGFACE_INFERENCE_URL=
-HUGGINGFACE_TIMEOUT_MS=45000
-GRADCAM_API_URL=
 OPENAI_API_KEY=
-OPENAI_REPORT_MODEL=gpt-4o-mini
-HUGGINGFACE_TEXT_MODEL_ID=
+OPENAI_VISION_MODEL=gpt-4o
+OPENAI_VISION_TIMEOUT_MS=60000
+OPENAI_VISION_MAX_TOKENS=800
+
 RISK_HIGH_THRESHOLD=70
-SEED_CHEST_XRAY_URLS=
-```
-
-After saving the variables, redeploy the Vercel project.
-
-## 9. Smoke Test On Vercel
-
-1. Open `https://radiant.trymindcore.com`.
-2. Sign in as an admin.
-3. Go to **Imaging**.
-4. Upload a chest X-ray PNG/JPEG/WebP.
-5. Click **Upload & analyze**.
-6. Confirm:
-   - PACS Archive shows the study
-   - AI Findings show probabilities
-   - Risk Score is calculated
-   - Report is generated
-   - Heatmap appears if `GRADCAM_API_URL` is configured
-   - Alerts appear for high-risk studies
-
-## 10. Common Issues
-
-### Hugging Face returns 503
-
-The model is warming up. Try again after a short wait.
-
-### Hugging Face says `fetch failed`
-
-This means Vercel could not complete the outgoing HTTP request to Hugging Face before receiving an HTTP status code.
-
-Check the Debug modal:
-
-- `HUGGINGFACE_API_KEY` should be `true`
-- `HUGGINGFACE_MODEL_ID` should be set
-- `analysis.failed.details.details.endpoint` shows the exact endpoint being called
-- `analysis.failed.details.details.cause` may show DNS, TLS, timeout, or connection reset details
-
-If the endpoint is the default `api-inference.huggingface.co/models/google/cxr-foundation`, switch to a dedicated Hugging Face Inference Endpoint or Space and set:
-
-```env
-HUGGINGFACE_INFERENCE_URL=https://your-endpoint-url
-```
-
-Then redeploy Vercel and test again.
-
-### No heatmap appears
-
-Check `GRADCAM_API_URL`. If it is empty or the Space is sleeping, Radiant skips heatmaps and still completes analysis.
-
-### Report is template-like
-
-OpenAI or Hugging Face text generation is not configured, so Radiant used its fallback report.
-
-### High-risk emails do not send
-
-Check these Vercel variables:
-
-```env
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=
-NEXT_PUBLIC_APP_URL=https://radiant.trymindcore.com
+NEXT_PUBLIC_APP_URL=
 ```
+
+After deploying, upload a chest X-ray from Patient Analysis. A successful run should archive the image, call GPT-4o Vision, store structured findings, show lung-zone overlays, and create alerts for high-risk results.
+
+## 8. Troubleshooting
+
+### Analysis says `OPENAI_API_KEY is not configured`
+
+Add `OPENAI_API_KEY` to the Vercel project and redeploy.
+
+### GPT returns non-JSON content
+
+The route uses JSON mode and strict validation. Check the debug panel in Patient Analysis for the failing step and response details.
+
+### Findings do not show overlays
+
+Confirm the migration adding `study_findings.zone` has run. Existing pre-migration findings may default to `center`; re-run analysis to generate true GPT zones.
+
+### Alerts are missing
+
+Confirm the returned `risk_score` is at or above `RISK_HIGH_THRESHOLD`, then check `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and admin profile emails.

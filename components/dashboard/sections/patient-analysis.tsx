@@ -21,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useApp } from "@/lib/app-context"
+import { findingsToHeatmapBoxes, formatFindingLabel, formatFindingZone } from "@/lib/lung-zones"
 import type { StudyView } from "@/lib/studies"
 import { useStudies } from "@/lib/use-studies"
 import { HeatmapViewer } from "../heatmap-viewer"
@@ -67,6 +68,7 @@ export function PatientAnalysis() {
   const [debugEntries, setDebugEntries] = useState<DebugEntry[]>([])
 
   const patient = selectedPatient ?? studies[0] ?? null
+  const heatmapBoxes = patient ? findingsToHeatmapBoxes(patient.findings) : []
 
   useEffect(() => {
     setApproved(false)
@@ -149,7 +151,7 @@ export function PatientAnalysis() {
         risk: payload.study.risk,
         rawStatus: payload.study.rawStatus,
         findings: payload.study.findings,
-        hasHeatmap: Boolean(payload.study.heatmapImage),
+        zoneOverlayCount: findingsToHeatmapBoxes(payload.study.findings).length,
       },
     })
     setSelectedPatient(payload.study)
@@ -315,7 +317,7 @@ export function PatientAnalysis() {
                   </button>
                 ))}
               </div>
-              <HeatmapViewer image={patient.image} heatmapImage={patient.heatmapImage} />
+              <HeatmapViewer image={patient.image} heatmapImage={patient.heatmapImage} boxes={heatmapBoxes} />
             </div>
 
             <div className="flex flex-col gap-5">
@@ -334,16 +336,19 @@ export function PatientAnalysis() {
                   </div>
                   <ul className="mt-4 flex flex-col gap-3">
                     {patient.findings.length === 0 && (
-                      <li className="text-sm text-muted-foreground">Run analysis to generate multi-label probabilities.</li>
+                      <li className="text-sm text-muted-foreground">Run GPT-4o Vision analysis to generate structured findings and lung-zone overlays.</li>
                     )}
                     {patient.findings.map((f) => (
-                      <li key={f.label}>
+                      <li key={`${f.label}-${f.zone}`} className="rounded-lg border border-border bg-background p-3">
                         <div className="mb-1 flex items-center justify-between text-sm">
-                          <span className="font-medium">{f.label}</span>
+                          <span className="font-medium">{formatFindingLabel(f.label)}</span>
                           <span className="tabular-nums text-muted-foreground">{f.confidence}%</span>
                         </div>
+                        <p className="mb-2 text-xs text-muted-foreground">
+                          Zone: <span className="font-medium text-foreground/80">{formatFindingZone(f.zone)}</span>
+                        </p>
                         <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                          <div className="h-full rounded-full bg-primary" style={{ width: `${f.confidence}%` }} />
+                          <div className="h-full rounded-full bg-destructive" style={{ width: `${f.confidence}%` }} />
                         </div>
                       </li>
                     ))}
@@ -379,7 +384,14 @@ export function PatientAnalysis() {
 
               <div className="grid gap-5 text-sm leading-relaxed sm:grid-cols-2">
                 <ReportBlock title="Summary" body={patient.summary} />
-                <ReportBlock title="Findings" body={patient.findings.map((f) => f.label).join("; ") || "Awaiting analysis."} />
+                <ReportBlock
+                  title="Findings"
+                  body={
+                    patient.findings
+                      .map((f) => `${formatFindingLabel(f.label)} (${formatFindingZone(f.zone)}, ${f.confidence}%)`)
+                      .join("; ") || "Awaiting GPT-4o Vision analysis."
+                  }
+                />
                 <ReportBlock title="Comparison" body={patient.comparison} />
                 <ReportBlock title="Recommendation" body={patient.recommendation} />
               </div>
@@ -446,8 +458,8 @@ function UploadCard({
       <CardContent className="p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="font-semibold">Upload & AI Analysis</h3>
-            <p className="text-xs text-muted-foreground">Use Debug when the AI pipeline fails or returns unexpected data.</p>
+            <h3 className="font-semibold">Upload & GPT-4o Vision Analysis</h3>
+            <p className="text-xs text-muted-foreground">Uploads are archived in PACS, analyzed by GPT-4o Vision, and rendered as zone-aware decision support.</p>
           </div>
           <Button type="button" variant="outline" onClick={onDebugOpen} data-icon="inline-start">
             <Bug data-icon="inline-start" />

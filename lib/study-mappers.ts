@@ -83,8 +83,8 @@ export async function mapStudyRows(service: SupabaseClient<Database>, rows: Stud
         findings: findings
           .slice()
           .sort((a, b) => b.confidence - a.confidence)
-          .map((finding) => ({ label: finding.label, confidence: finding.confidence })),
-        summary: report?.summary ?? "Upload complete. Analysis has not generated a report yet.",
+          .map((finding) => ({ label: finding.label, zone: finding.zone, confidence: finding.confidence })),
+        summary: study.summary ?? report?.summary ?? "Upload complete. Analysis has not generated a report yet.",
         comparison: report?.comparison ?? "No prior study on file.",
         recommendation: report?.recommendation ?? "Run AI analysis to generate a recommendation draft.",
         disclaimer: report?.disclaimer ?? "AI-assisted draft. Not a clinical diagnosis; radiologist review is required.",

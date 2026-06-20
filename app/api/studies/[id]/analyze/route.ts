@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server"
 import { isApiError, requireCompletedProfile } from "@/lib/api-auth"
-import { generateHeatmap } from "@/lib/gradcam"
-import { classifyChestXray, HuggingFaceInferenceError } from "@/lib/huggingface"
-import { computeRisk } from "@/lib/risk"
-import { generateReport } from "@/lib/reports"
+import { analyzeChestXrayWithGptVision, GptVisionAnalysisError } from "@/lib/gpt-vision"
 import { sendHighRiskAlertEmail } from "@/lib/resend"
 import { mapStudyRows } from "@/lib/study-mappers"
 
@@ -20,14 +17,10 @@ type DebugStep = {
 
 function aiEnvStatus() {
   return {
-    HUGGINGFACE_API_KEY: Boolean(process.env.HUGGINGFACE_API_KEY),
-    HUGGINGFACE_MODEL_ID: process.env.HUGGINGFACE_MODEL_ID || "google/cxr-foundation",
-    HUGGINGFACE_INFERENCE_URL: Boolean(process.env.HUGGINGFACE_INFERENCE_URL),
-    HUGGINGFACE_TIMEOUT_MS: process.env.HUGGINGFACE_TIMEOUT_MS || "45000",
-    GRADCAM_API_URL: Boolean(process.env.GRADCAM_API_URL),
     OPENAI_API_KEY: Boolean(process.env.OPENAI_API_KEY),
-    OPENAI_REPORT_MODEL: process.env.OPENAI_REPORT_MODEL || "gpt-4o-mini",
-    HUGGINGFACE_TEXT_MODEL_ID: process.env.HUGGINGFACE_TEXT_MODEL_ID || null,
+    OPENAI_VISION_MODEL: process.env.OPENAI_VISION_MODEL || "gpt-4o",
+    OPENAI_VISION_TIMEOUT_MS: process.env.OPENAI_VISION_TIMEOUT_MS || "60000",
+    OPENAI_VISION_MAX_TOKENS: process.env.OPENAI_VISION_MAX_TOKENS || "800",
     RISK_HIGH_THRESHOLD: process.env.RISK_HIGH_THRESHOLD || "70",
     RESEND_API_KEY: Boolean(process.env.RESEND_API_KEY),
   }
@@ -37,8 +30,8 @@ function errorDebug(error: unknown) {
   return {
     name: error instanceof Error ? error.name : "UnknownError",
     message: error instanceof Error ? error.message : String(error),
-    status: error instanceof HuggingFaceInferenceError ? error.status : undefined,
-    details: error instanceof HuggingFaceInferenceError ? error.details : undefined,
+    status: error instanceof GptVisionAnalysisError ? error.status : undefined,
+    details: error instanceof GptVisionAnalysisError ? error.details : undefined,
   }
 }
 
@@ -52,6 +45,18 @@ function labelForDisplay(label: string) {
 function highRiskThreshold() {
   const configured = Number(process.env.RISK_HIGH_THRESHOLD ?? "70")
   return Number.isFinite(configured) ? configured : 70
+}
+
+function recommendationForRisk(riskScore: number) {
+  if (riskScore >= highRiskThreshold()) {
+    return "Prioritize radiologist review and notify the receiving care team for expedited clinical correlation."
+  }
+
+  if (riskScore >= 40) {
+    return "Route for standard radiologist review with attention to the highlighted lung zones and patient context."
+  }
+
+  return "Continue routine workflow review. The AI summary should be interpreted by a qualified clinician."
 }
 
 async function canAccessStudy(auth: Awaited<ReturnType<typeof requireCompletedProfile>>, studyId: string) {
@@ -109,7 +114,7 @@ export async function POST(_request: Request, context: Context) {
   addStep("access.study", true, { studyId: id })
 
   const { data: rawStudy, error: studyError } = await (auth.service.from("studies") as any)
-    .select("*, patients(external_id, display_name), study_clinical_context(*)")
+    .select("*, patients(external_id, display_name)")
     .eq("id", id)
     .eq("organization_id", auth.profile.organization_id!)
     .single()
@@ -148,79 +153,33 @@ export async function POST(_request: Request, context: Context) {
 
   const startedAt = Date.now()
   const image = Buffer.from(await imageBlob.arrayBuffer())
-  const contextRow = Array.isArray(study.study_clinical_context)
-    ? study.study_clinical_context[0]
-    : study.study_clinical_context
-  const clinicalContext = {
-    spo2: contextRow?.spo2 ?? null,
-    fever: contextRow?.fever ?? false,
-    symptoms: contextRow?.symptoms ?? null,
-  }
 
   try {
-    addStep("ai.parallel_start", true, {
-      classification: "huggingface",
-      heatmap: process.env.GRADCAM_API_URL ? "gradcam_endpoint" : "skipped_no_url",
-    })
-    const [classification, heatmap] = await Promise.all([
-      classifyChestXray(image, study.image_mime_type),
-      generateHeatmap(image, study.image_mime_type),
-    ])
-    addStep("ai.huggingface_classification", true, {
-      modelId: classification.modelId,
-      labels: Object.keys(classification.probabilities),
-      probabilities: classification.probabilities,
-    })
-    addStep("ai.gradcam_heatmap", !heatmap.error, {
-      skipped: heatmap.skipped,
-      hasHeatmap: Boolean(heatmap.heatmap),
-      contentType: heatmap.contentType,
-      error: heatmap.error,
+    addStep("ai.gpt4o_vision_request", true, {
+      modelId: process.env.OPENAI_VISION_MODEL || "gpt-4o",
+      mimeType: study.image_mime_type,
+      imageBytes: image.length,
     })
 
-    const risk = computeRisk(classification.probabilities, clinicalContext)
-    addStep("risk.compute", true, risk)
-
-    const report = await generateReport({
-      probabilities: classification.probabilities,
-      risk,
-      clinicalContext,
+    const analysis = await analyzeChestXrayWithGptVision(image, study.image_mime_type)
+    addStep("ai.gpt4o_vision_response", true, {
+      responseId: analysis.responseId,
+      modelId: analysis.modelId,
+      riskScore: analysis.riskScore,
+      riskLevel: analysis.riskLevel,
+      findings: analysis.findings,
     })
-    addStep("report.generate", true, {
-      modelUsed: report.modelUsed,
-      fallback: report.modelUsed === "fallback-template",
-      rawPresent: Boolean(report.raw),
-    })
-
-    let heatmapStoragePath: string | null = null
-    if (heatmap.heatmap) {
-      heatmapStoragePath = `${auth.profile.organization_id}/${study.id}/heatmap.png`
-      const { error: heatmapStorageError } = await auth.service.storage
-        .from("studies")
-        .upload(heatmapStoragePath, heatmap.heatmap, {
-          contentType: heatmap.contentType ?? "image/png",
-          upsert: true,
-        })
-
-      if (heatmapStorageError) {
-        heatmapStoragePath = null
-        addStep("storage.upload_heatmap", false, { message: heatmapStorageError.message })
-      } else {
-        addStep("storage.upload_heatmap", true, { heatmapStoragePath })
-      }
-    } else {
-      addStep("storage.upload_heatmap", true, { skipped: true })
-    }
 
     await auth.service.from("study_findings").delete().eq("study_id", study.id)
     addStep("database.clear_findings", true)
 
-    const findings = Object.entries(classification.probabilities)
-      .map(([label, probability]) => ({
+    const findings = analysis.findings
+      .map((finding) => ({
         study_id: study.id,
-        label: labelForDisplay(label),
-        confidence: Math.round((probability ?? 0) * 100),
-        raw_probability: probability ?? 0,
+        label: finding.label,
+        zone: finding.zone,
+        confidence: Math.round(finding.confidence * 100),
+        raw_probability: Number(finding.confidence.toFixed(5)),
       }))
       .sort((a, b) => b.confidence - a.confidence)
 
@@ -233,15 +192,16 @@ export async function POST(_request: Request, context: Context) {
     }
     addStep("database.insert_findings", true, { count: findings.length })
 
+    const rawFindings = analysis.raw as any
     const { error: reportError } = await auth.service.from("reports").upsert(
       {
         study_id: study.id,
-        summary: report.summary,
-        comparison: report.comparison,
-        recommendation: report.recommendation,
-        disclaimer: report.disclaimer,
-        raw_llm_response: report.raw,
-        model_used: report.modelUsed,
+        summary: analysis.summary,
+        comparison: "No prior study on file.",
+        recommendation: recommendationForRisk(analysis.riskScore),
+        disclaimer: "AI-assisted draft. Not a clinical diagnosis; radiologist review is required.",
+        raw_llm_response: JSON.stringify(analysis.raw),
+        model_used: analysis.modelId,
       },
       { onConflict: "study_id" },
     )
@@ -252,18 +212,20 @@ export async function POST(_request: Request, context: Context) {
     }
     addStep("database.upsert_report", true)
 
-    const nextStatus = risk.score >= highRiskThreshold() ? "critical" : "analyzed"
+    const nextStatus = analysis.riskScore >= highRiskThreshold() ? "critical" : "analyzed"
     const { error: updateError } = await auth.service
       .from("studies")
       .update({
-        heatmap_storage_path: heatmapStoragePath,
+        heatmap_storage_path: null,
         status: nextStatus,
-        risk_score: risk.score,
-        risk_level: risk.level,
-        model_id: classification.modelId,
-        report_model_id: report.modelUsed,
+        risk_score: analysis.riskScore,
+        risk_level: analysis.riskLevel,
+        summary: analysis.summary,
+        raw_findings: rawFindings,
+        model_id: analysis.modelId,
+        report_model_id: analysis.modelId,
         analysis_duration_ms: Date.now() - startedAt,
-        analysis_error: heatmap.error ?? null,
+        analysis_error: null,
         analyzed_at: new Date().toISOString(),
       })
       .eq("id", study.id)
@@ -274,23 +236,23 @@ export async function POST(_request: Request, context: Context) {
     }
     addStep("database.update_study_result", true, {
       status: nextStatus,
-      riskScore: risk.score,
-      riskLevel: risk.level,
+      riskScore: analysis.riskScore,
+      riskLevel: analysis.riskLevel,
       analysisDurationMs: Date.now() - startedAt,
     })
 
-    if (risk.score >= highRiskThreshold()) {
-      const topFinding = findings[0]?.label ?? "High-risk pattern"
+    if (analysis.riskScore >= highRiskThreshold()) {
+      const topFinding = findings[0]?.label ? labelForDisplay(findings[0].label) : "High-risk pattern"
       await auth.service.from("alerts").upsert(
         {
           organization_id: auth.profile.organization_id!,
           study_id: study.id,
           title: `High-risk ${topFinding} pattern`,
-          risk_score: risk.score,
+          risk_score: analysis.riskScore,
         },
         { onConflict: "study_id" },
       )
-      addStep("alerts.upsert", true, { threshold: highRiskThreshold(), riskScore: risk.score })
+      addStep("alerts.upsert", true, { threshold: highRiskThreshold(), riskScore: analysis.riskScore })
 
       const [{ data: admins }, { data: organization }] = await Promise.all([
         auth.service
@@ -308,7 +270,7 @@ export async function POST(_request: Request, context: Context) {
             to: admin.email,
             patientId: study.patients?.external_id ?? "Unknown",
             studyUrl: `${appUrl}/`,
-            riskScore: risk.score,
+            riskScore: analysis.riskScore,
             topFinding,
             organizationName: organization?.name ?? "Radiant",
           }),
@@ -316,7 +278,7 @@ export async function POST(_request: Request, context: Context) {
       )
       addStep("alerts.email_admins", true, { attempted: admins?.length ?? 0 })
     } else {
-      addStep("alerts.skip", true, { threshold: highRiskThreshold(), riskScore: risk.score })
+      addStep("alerts.skip", true, { threshold: highRiskThreshold(), riskScore: analysis.riskScore })
     }
 
     const { data: rows, error: viewError } = await (auth.service.from("studies") as any)

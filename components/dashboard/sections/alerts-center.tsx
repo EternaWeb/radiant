@@ -33,9 +33,16 @@ export function AlertsCenter() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="flex h-7 items-center gap-1.5 rounded-full bg-destructive/15 px-3 text-xs font-semibold text-destructive">
           <TriangleAlert className="h-3.5 w-3.5" /> {alerts.length} active critical alerts
+        </span>
+        <span className="flex h-7 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs text-muted-foreground">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full rounded-full bg-success opacity-75 [animation:pulse-ring_2s_ease-out_infinite]" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+          </span>
+          Auto-refreshing high-risk studies
         </span>
       </div>
       {error && <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}

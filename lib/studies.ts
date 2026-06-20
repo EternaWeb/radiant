@@ -1,7 +1,8 @@
-import type { RiskLevel, StudyModality, StudyStatus } from "@/lib/supabase/types"
+import type { FindingZone, RiskLevel, StudyModality, StudyStatus } from "@/lib/supabase/types"
 
 export type StudyFindingView = {
   label: string
+  zone: FindingZone
   confidence: number
 }
 

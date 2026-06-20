@@ -3,6 +3,8 @@ export type WorkspaceRole = "admin" | "participant"
 export type StudyModality = "xray" | "ct" | "mri" | "ultrasound"
 export type StudyStatus = "uploaded" | "analyzing" | "analyzed" | "reviewed" | "critical" | "failed"
 export type RiskLevel = "low" | "medium" | "high"
+export type FindingZone = "left_upper" | "left_lower" | "right_upper" | "right_lower" | "center"
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Organization = {
   id: string
@@ -81,6 +83,8 @@ export type StudyRecord = {
   status: StudyStatus
   risk_score: number | null
   risk_level: RiskLevel | null
+  summary: string | null
+  raw_findings: Json | null
   model_id: string | null
   report_model_id: string | null
   analysis_duration_ms: number | null
@@ -104,6 +108,7 @@ export type StudyFinding = {
   id: string
   study_id: string
   label: string
+  zone: FindingZone
   confidence: number
   raw_probability: number
   created_at: string

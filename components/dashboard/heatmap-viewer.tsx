@@ -2,16 +2,7 @@
 
 import { useState } from "react"
 import { Eye, EyeOff } from "lucide-react"
-
-type Box = {
-  top: number
-  left: number
-  width: number
-  height: number
-  label: string
-  confidence: number
-  tone: "danger" | "warning"
-}
+import type { HeatmapBox } from "@/lib/lung-zones"
 
 export function HeatmapViewer({
   image,
@@ -20,15 +11,16 @@ export function HeatmapViewer({
 }: {
   image: string
   heatmapImage?: string | null
-  boxes?: Box[]
+  boxes?: HeatmapBox[]
 }) {
   const [showOverlay, setShowOverlay] = useState(true)
+  const hasZoneBoxes = boxes.length > 0
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-border bg-black">
-      <img src={image || "/placeholder.svg"} alt="Medical scan with AI analysis overlay" className="w-full" />
+    <div className="relative overflow-hidden rounded-xl border border-border bg-black shadow-2xl shadow-black/10">
+      <img src={image || "/placeholder.svg"} alt="Medical scan with AI analysis overlay" className="w-full select-none" />
 
-      {showOverlay && heatmapImage && (
+      {showOverlay && !hasZoneBoxes && heatmapImage && (
         <img
           src={heatmapImage}
           alt="Grad-CAM model attention overlay"
@@ -37,40 +29,49 @@ export function HeatmapViewer({
       )}
 
       {showOverlay &&
-        !heatmapImage &&
+        hasZoneBoxes &&
         boxes.map((b, i) => {
-          const ring = b.tone === "danger" ? "border-destructive" : "border-warning"
-          const chip = b.tone === "danger" ? "bg-destructive text-white" : "bg-warning text-warning-foreground"
-          const glow =
-            b.tone === "danger" ? "rgba(239,68,68,0.35)" : "rgba(245,158,11,0.3)"
+          const inset = i * 1.5
+          const fill = `rgba(239, 68, 68, ${b.opacity})`
+          const glow = `rgba(239, 68, 68, ${Math.min(b.opacity + 0.12, 0.9)})`
           return (
             <div
-              key={i}
-              className="absolute"
+              key={b.id}
+              className="group absolute"
               style={{
-                top: `${b.top}%`,
-                left: `${b.left}%`,
-                width: `${b.width}%`,
-                height: `${b.height}%`,
+                top: `calc(${b.top}% + ${inset}px)`,
+                left: `calc(${b.left}% + ${inset}px)`,
+                width: `calc(${b.width}% - ${inset * 2}px)`,
+                height: `calc(${b.height}% - ${inset * 2}px)`,
               }}
             >
               <div
-                className={`h-full w-full rounded-md border-2 ${ring}`}
-                style={{ boxShadow: `0 0 0 9999px transparent, inset 0 0 40px ${glow}`, background: glow }}
+                className="h-full w-full rounded-lg border-2 border-red-400/95 transition-transform duration-200 group-hover:scale-[1.015]"
+                style={{
+                  background: fill,
+                  boxShadow: `0 0 28px ${glow}, inset 0 0 46px ${glow}`,
+                  mixBlendMode: "screen",
+                }}
               />
-              <span
-                className={`absolute -top-6 left-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${chip}`}
-              >
-                {b.label} {b.confidence}%
-              </span>
+              <div className="pointer-events-none absolute left-2 top-2 max-w-48 rounded-lg border border-white/15 bg-black/80 px-2.5 py-2 text-xs text-white opacity-0 shadow-xl backdrop-blur transition-opacity group-hover:opacity-100">
+                <p className="font-semibold">{b.label}</p>
+                <p className="mt-0.5 text-white/70">{b.zoneLabel}</p>
+                <p className="mt-1 font-mono text-[11px] text-red-200">{b.confidence}% confidence</p>
+              </div>
             </div>
           )
         })}
 
+      {showOverlay && hasZoneBoxes && (
+        <div className="absolute bottom-3 left-3 rounded-lg border border-red-400/25 bg-black/55 px-2.5 py-1.5 text-[11px] font-medium text-red-100 backdrop-blur">
+          GPT lung-zone overlay · {boxes.length} finding{boxes.length === 1 ? "" : "s"}
+        </div>
+      )}
+
       {/* DICOM-style corner overlays */}
       <div className="pointer-events-none absolute left-3 top-3 font-mono text-[11px] leading-tight text-white/70">
-        <p>MedVision AI</p>
-        <p>SERIES 1 / IM 1</p>
+        <p>Radiant PACS</p>
+        <p>AI DECISION SUPPORT</p>
       </div>
       <div className="pointer-events-none absolute bottom-3 right-3 text-right font-mono text-[11px] leading-tight text-white/70">
         <p>W 2048 / L 1024</p>
