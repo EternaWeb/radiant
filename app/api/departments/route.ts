@@ -32,30 +32,41 @@ export async function GET() {
   ])
 
   const staff = (profiles ?? []) as Profile[]
-  const rows = ((departments ?? []) as DepartmentRecord[]).map((department) => {
-    const departmentStaff = staff.filter((member) => member.department_id === department.id)
-    const lead = departmentStaff.find((member) => member.is_admin) ?? departmentStaff[0]
+  const hospitalName = organization?.name ?? "Workspace"
+  const rows = ((departments ?? []) as DepartmentRecord[])
+    .map((department) => {
+      const departmentStaff = staff.filter((member) => member.department_id === department.id)
+      const lead = departmentStaff.find((member) => member.is_admin) ?? departmentStaff[0]
 
-    return {
-      ...department,
-      hospital: organization?.name ?? "Workspace",
-      lead: lead?.full_name ?? "Unassigned",
-      staff: departmentStaff.map((member) => ({
-        id: member.id,
-        name: member.full_name,
-        role: formatClinicalRole(member.clinical_role),
-        clinicalRole: member.clinical_role,
-        email: member.email,
-        phone: member.phone ?? "Not added",
-        shift: member.is_admin ? "Workspace admin" : "Participant",
-        status: "Online",
-        isAdmin: member.is_admin,
-        workspaceRole: member.workspace_role,
-        department: department.name,
-        hospital: organization?.name ?? "Workspace",
-      })),
-    }
+      return {
+        ...department,
+        hospital: hospitalName,
+        lead: lead?.full_name ?? "Unassigned",
+        memberCount: departmentStaff.length,
+        staff: departmentStaff.map((member) => ({
+          id: member.id,
+          name: member.full_name,
+          role: formatClinicalRole(member.clinical_role),
+          clinicalRole: member.clinical_role,
+          email: member.email,
+          phone: member.phone ?? "Not added",
+          shift: member.is_admin ? "Workspace admin" : "Participant",
+          status: "Online",
+          isAdmin: member.is_admin,
+          workspaceRole: member.workspace_role,
+          department: department.name,
+          hospital: hospitalName,
+        })),
+      }
+    })
+    .filter((department) => department.memberCount > 0)
+
+  return NextResponse.json({
+    organization: {
+      id: organization?.id ?? profile.organization_id,
+      name: hospitalName,
+    },
+    departments: rows,
+    isAdmin: profile.is_admin,
   })
-
-  return NextResponse.json({ departments: rows, isAdmin: profile.is_admin })
 }

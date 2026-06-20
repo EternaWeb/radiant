@@ -17,6 +17,7 @@ import {
   Send,
   Check,
   Shield,
+  Building2,
   type LucideIcon,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -37,6 +38,7 @@ type DirectoryMember = {
   status: StaffStatus
   isAdmin: boolean
   workspaceRole: string
+  clinicalRole: string
   department: string
   hospital: string
 }
@@ -48,7 +50,17 @@ type DirectoryDepartment = {
   lead: string
   location: string
   hospital: string
+  memberCount: number
   staff: DirectoryMember[]
+}
+
+type DepartmentsResponse = {
+  organization?: {
+    id: string
+    name: string
+  }
+  departments?: DirectoryDepartment[]
+  error?: string
 }
 
 const icons: Record<string, LucideIcon> = {
@@ -67,6 +79,7 @@ const statusTone: Record<StaffStatus, "success" | "warning" | "muted"> = {
 export function Departments() {
   const { isAdmin } = useApp()
   const [departments, setDepartments] = useState<DirectoryDepartment[]>([])
+  const [organizationName, setOrganizationName] = useState("Hospital organization")
   const [activeId, setActiveId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -75,7 +88,7 @@ export function Departments() {
     setLoading(true)
     setError(null)
     const response = await fetch("/api/departments")
-    const result = await response.json()
+    const result = (await response.json()) as DepartmentsResponse
     setLoading(false)
 
     if (!response.ok) {
@@ -83,7 +96,8 @@ export function Departments() {
       return
     }
 
-    setDepartments(result.departments)
+    setOrganizationName(result.organization?.name ?? "Hospital organization")
+    setDepartments(result.departments ?? [])
   }
 
   useEffect(() => {
@@ -120,19 +134,32 @@ export function Departments() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Departments</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage department teams, contacts, and access. Select a department to view its staff.
-        </p>
-      </div>
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <Building2 className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Hospital organization</p>
+              <h2 className="text-2xl font-bold tracking-tight">{organizationName}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Select a department to view only the people assigned to that department.
+              </p>
+            </div>
+          </div>
+          <Badge variant="muted">
+            <Users className="h-3 w-3" /> {departments.length} active departments
+          </Badge>
+        </CardContent>
+      </Card>
 
       {loading && <p className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Loading departments...</p>}
       {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">{error}</p>}
 
       {!loading && !error && departments.length === 0 && (
         <p className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-          No departments have been created for this workspace yet.
+          No departments with accepted members yet. Empty departments are hidden until someone joins them.
         </p>
       )}
 
@@ -151,15 +178,15 @@ export function Departments() {
                   <Icon className="h-5 w-5" />
                 </div>
                 <Badge variant="muted">
-                  <Users className="h-3 w-3" /> {department.staff.length}
+                  <Users className="h-3 w-3" /> {department.memberCount}
                 </Badge>
               </div>
               <p className="mt-4 text-lg font-semibold">{department.name}</p>
-              <p className="text-xs text-muted-foreground">Lead · {department.lead}</p>
+              <p className="text-xs text-muted-foreground">{department.hospital}</p>
               <p className="mt-3 text-xs text-muted-foreground">{department.location}</p>
               <div className="mt-3 inline-flex items-center gap-1.5 text-xs text-success">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                {online} online now
+                {online} online now · {department.memberCount} people
               </div>
             </button>
           )
@@ -184,6 +211,11 @@ function DepartmentDetail({
 }) {
   const [modalOpen, setModalOpen] = useState(false)
   const Icon = icons[department.icon] ?? ScanLine
+  const roleGroups = department.staff.reduce<Record<string, DirectoryMember[]>>((groups, staff) => {
+    groups[staff.role] = [...(groups[staff.role] ?? []), staff]
+    return groups
+  }, {})
+  const groupedEntries = Object.entries(roleGroups).sort(([a], [b]) => a.localeCompare(b))
 
   return (
     <div className="flex flex-col gap-5">
@@ -203,7 +235,7 @@ function DepartmentDetail({
             <div>
               <h2 className="text-xl font-bold tracking-tight">{department.name}</h2>
               <p className="text-sm text-muted-foreground">
-                {department.location} · Lead {department.lead}
+                {department.hospital} · {department.location}
               </p>
             </div>
           </div>
@@ -222,8 +254,8 @@ function DepartmentDetail({
         <CardContent className="p-5">
           <div className="mb-4 flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
-            <h3 className="font-semibold">Team members</h3>
-            <Badge variant="muted">{department.staff.length}</Badge>
+            <h3 className="font-semibold">People in {department.name}</h3>
+            <Badge variant="muted">{department.memberCount}</Badge>
           </div>
 
           {department.staff.length === 0 ? (
@@ -231,54 +263,16 @@ function DepartmentDetail({
               No accepted members in this department yet. Admins can send invites to add users.
             </p>
           ) : (
-            <div className="flex flex-col gap-3">
-              {department.staff.map((staff) => (
-                <div
-                  key={staff.id}
-                  className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-border bg-background p-4 transition-colors hover:bg-muted/40"
-                >
-                  <div className="min-w-48 flex-1">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">
-                        {staff.name
-                          .split(" ")
-                          .map((name) => name[0])
-                          .slice(0, 2)
-                          .join("")}
-                      </div>
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium">{staff.name}</p>
-                          <Badge variant={statusTone[staff.status]}>{staff.status}</Badge>
-                          {staff.isAdmin && (
-                            <Badge variant="default">
-                              <Shield className="h-3 w-3" /> Admin
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">{staff.role}</p>
-                      </div>
-                    </div>
-
-                    <dl className="mt-4 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-                      <Info label="User ID" value={staff.id} />
-                      <Info label="Email" value={staff.email} icon={Mail} />
-                      <Info label="Phone" value={staff.phone} icon={Phone} />
-                      <Info label="Workspace role" value={staff.workspaceRole} icon={Clock} />
-                      <Info label="Department" value={staff.department} />
-                      <Info label="Hospital" value={staff.hospital} />
-                      <Info label="Is admin" value={staff.isAdmin ? "Yes" : "No"} />
-                    </dl>
+            <div className="flex flex-col gap-5">
+              {groupedEntries.map(([role, staffMembers]) => (
+                <div key={role} className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold">{role}</h4>
+                    <Badge variant="muted">{staffMembers.length}</Badge>
                   </div>
-
-                  {isAdmin && !staff.isAdmin && (
-                    <button
-                      onClick={() => onKick(staff.id)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-destructive transition-colors hover:border-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" /> Remove
-                    </button>
-                  )}
+                  {staffMembers.map((staff) => (
+                    <MemberCard key={staff.id} staff={staff} isAdmin={isAdmin} onKick={onKick} />
+                  ))}
                 </div>
               ))}
             </div>
@@ -292,6 +286,63 @@ function DepartmentDetail({
           onClose={() => setModalOpen(false)}
           onInvite={onInvite}
         />
+      )}
+    </div>
+  )
+}
+
+function MemberCard({
+  staff,
+  isAdmin,
+  onKick,
+}: {
+  staff: DirectoryMember
+  isAdmin: boolean
+  onKick: (staffId: string) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-border bg-background p-4 transition-colors hover:bg-muted/40">
+      <div className="min-w-48 flex-1">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">
+            {staff.name
+              .split(" ")
+              .map((name) => name[0])
+              .slice(0, 2)
+              .join("")}
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-medium">{staff.name}</p>
+              <Badge variant={statusTone[staff.status]}>{staff.status}</Badge>
+              {staff.isAdmin && (
+                <Badge variant="default">
+                  <Shield className="h-3 w-3" /> Admin
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">{staff.role}</p>
+          </div>
+        </div>
+
+        <dl className="mt-4 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+          <Info label="User ID" value={staff.id} />
+          <Info label="Email" value={staff.email} icon={Mail} />
+          <Info label="Phone" value={staff.phone} icon={Phone} />
+          <Info label="Workspace role" value={staff.workspaceRole} icon={Clock} />
+          <Info label="Department" value={staff.department} />
+          <Info label="Hospital" value={staff.hospital} />
+          <Info label="Is admin" value={staff.isAdmin ? "Yes" : "No"} />
+        </dl>
+      </div>
+
+      {isAdmin && !staff.isAdmin && (
+        <button
+          onClick={() => onKick(staff.id)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-destructive transition-colors hover:border-destructive hover:bg-destructive/10"
+        >
+          <Trash2 className="h-3.5 w-3.5" /> Remove
+        </button>
       )}
     </div>
   )
