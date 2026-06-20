@@ -22,6 +22,8 @@ function aiEnvStatus() {
   return {
     HUGGINGFACE_API_KEY: Boolean(process.env.HUGGINGFACE_API_KEY),
     HUGGINGFACE_MODEL_ID: process.env.HUGGINGFACE_MODEL_ID || "google/cxr-foundation",
+    HUGGINGFACE_INFERENCE_URL: Boolean(process.env.HUGGINGFACE_INFERENCE_URL),
+    HUGGINGFACE_TIMEOUT_MS: process.env.HUGGINGFACE_TIMEOUT_MS || "45000",
     GRADCAM_API_URL: Boolean(process.env.GRADCAM_API_URL),
     OPENAI_API_KEY: Boolean(process.env.OPENAI_API_KEY),
     OPENAI_REPORT_MODEL: process.env.OPENAI_REPORT_MODEL || "gpt-4o-mini",
@@ -36,6 +38,7 @@ function errorDebug(error: unknown) {
     name: error instanceof Error ? error.name : "UnknownError",
     message: error instanceof Error ? error.message : String(error),
     status: error instanceof HuggingFaceInferenceError ? error.status : undefined,
+    details: error instanceof HuggingFaceInferenceError ? error.details : undefined,
   }
 }
 

@@ -33,6 +33,24 @@ Set the model ID in Vercel:
 HUGGINGFACE_MODEL_ID=google/cxr-foundation
 ```
 
+By default Radiant calls:
+
+```text
+https://api-inference.huggingface.co/models/google/cxr-foundation
+```
+
+If that classic Inference API URL does not work for the model, create a dedicated Hugging Face Inference Endpoint or Space and set:
+
+```env
+HUGGINGFACE_INFERENCE_URL=https://your-endpoint-url
+```
+
+You can also increase the request timeout:
+
+```env
+HUGGINGFACE_TIMEOUT_MS=45000
+```
+
 Expected output shape:
 
 ```json
@@ -169,6 +187,8 @@ Add these in **Vercel > Project > Settings > Environment Variables**:
 ```env
 HUGGINGFACE_API_KEY=
 HUGGINGFACE_MODEL_ID=google/cxr-foundation
+HUGGINGFACE_INFERENCE_URL=
+HUGGINGFACE_TIMEOUT_MS=45000
 GRADCAM_API_URL=
 OPENAI_API_KEY=
 OPENAI_REPORT_MODEL=gpt-4o-mini
@@ -199,6 +219,25 @@ After saving the variables, redeploy the Vercel project.
 ### Hugging Face returns 503
 
 The model is warming up. Try again after a short wait.
+
+### Hugging Face says `fetch failed`
+
+This means Vercel could not complete the outgoing HTTP request to Hugging Face before receiving an HTTP status code.
+
+Check the Debug modal:
+
+- `HUGGINGFACE_API_KEY` should be `true`
+- `HUGGINGFACE_MODEL_ID` should be set
+- `analysis.failed.details.details.endpoint` shows the exact endpoint being called
+- `analysis.failed.details.details.cause` may show DNS, TLS, timeout, or connection reset details
+
+If the endpoint is the default `api-inference.huggingface.co/models/google/cxr-foundation`, switch to a dedicated Hugging Face Inference Endpoint or Space and set:
+
+```env
+HUGGINGFACE_INFERENCE_URL=https://your-endpoint-url
+```
+
+Then redeploy Vercel and test again.
 
 ### No heatmap appears
 

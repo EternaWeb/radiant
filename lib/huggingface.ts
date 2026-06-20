@@ -14,6 +14,7 @@ export class HuggingFaceInferenceError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    readonly details?: Record<string, unknown>,
   ) {
     super(message)
     this.name = "HuggingFaceInferenceError"
@@ -30,6 +31,24 @@ function getApiKey() {
     throw new HuggingFaceInferenceError("HUGGINGFACE_API_KEY is not configured.")
   }
   return key
+}
+
+function getInferenceEndpoint() {
+  const override = process.env.HUGGINGFACE_INFERENCE_URL?.trim()
+  if (override) return override
+
+  return `https://api-inference.huggingface.co/models/${getModelId()}`
+}
+
+function errorCause(error: unknown) {
+  if (!(error instanceof Error)) return undefined
+
+  const cause = (error as Error & { cause?: unknown }).cause
+  if (!cause || typeof cause !== "object") return undefined
+
+  return Object.fromEntries(
+    Object.entries(cause as Record<string, unknown>).filter(([, value]) => typeof value !== "function"),
+  )
 }
 
 function canonicalLabel(label: string): ChestXrayLabel | null {
@@ -98,14 +117,39 @@ export function normalizeChestXrayProbabilities(payload: unknown): ChestXrayProb
 
 async function requestInference(image: Buffer, mimeType: string, attempt = 1): Promise<unknown> {
   const modelId = getModelId()
-  const response = await fetch(`https://api-inference.huggingface.co/models/${modelId}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${getApiKey()}`,
-      "Content-Type": mimeType,
-    },
-    body: image,
-  })
+  const endpoint = getInferenceEndpoint()
+  const timeoutMs = Number(process.env.HUGGINGFACE_TIMEOUT_MS ?? "45000")
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  let response: Response
+
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getApiKey()}`,
+        "Content-Type": mimeType,
+        Accept: "application/json",
+      },
+      body: image,
+      cache: "no-store",
+      signal: controller.signal,
+    })
+  } catch (error) {
+    throw new HuggingFaceInferenceError("Hugging Face request failed before receiving an HTTP response.", undefined, {
+      endpoint,
+      modelId,
+      mimeType,
+      attempt,
+      timeoutMs,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      cause: errorCause(error),
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
 
   if (response.status === 503 && attempt < 3) {
     await new Promise((resolve) => setTimeout(resolve, 1500))
@@ -114,7 +158,15 @@ async function requestInference(image: Buffer, mimeType: string, attempt = 1): P
 
   if (!response.ok) {
     const message = await response.text()
-    throw new HuggingFaceInferenceError(message || "Hugging Face inference failed.", response.status)
+    throw new HuggingFaceInferenceError(message || "Hugging Face inference failed.", response.status, {
+      endpoint,
+      modelId,
+      mimeType,
+      attempt,
+      status: response.status,
+      statusText: response.statusText,
+      body: message.slice(0, 2000),
+    })
   }
 
   return response.json()
