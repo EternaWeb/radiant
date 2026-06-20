@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
 import { useEffect } from "react"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Activity, Loader2, Mail } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 
@@ -14,6 +15,7 @@ type InviteEntryProps = {
 }
 
 export function InviteEntry({ token, email, organizationName, departmentName, roleLabel }: InviteEntryProps) {
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,6 +36,17 @@ export function InviteEntry({ token, email, organizationName, departmentName, ro
         setError(result.error ?? "Could not prepare this invite.")
         return
       }
+
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (user) {
+        router.push(`/invite/${token}/onboarding`)
+        return
+      }
+
       setReady(true)
     }
 
@@ -41,17 +54,18 @@ export function InviteEntry({ token, email, organizationName, departmentName, ro
     return () => {
       active = false
     }
-  }, [token])
+  }, [router, token])
 
   async function signIn() {
     setLoading(true)
     setError(null)
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin
+    const next = encodeURIComponent(`/invite/${token}/onboarding`)
     const supabase = createClient()
     const { error: signInError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${appUrl}/auth/callback?next=/`,
+        redirectTo: `${appUrl}/auth/callback?next=${next}`,
       },
     })
 

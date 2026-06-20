@@ -5,6 +5,14 @@ import { Building2, ArrowRight, ArrowDown, Cpu, Database } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useApp } from "@/lib/app-context"
 import { Stepper } from "./role-select"
+import type { DepartmentRecord, Organization, Profile } from "@/lib/supabase/types"
+
+type CompleteOnboardingResponse = {
+  error?: string
+  profile?: Profile
+  organization?: Organization
+  department?: DepartmentRecord
+}
 
 function Field({
   label,
@@ -49,26 +57,40 @@ export function HospitalSetup() {
     setError(null)
     setHospital({ name: name || "St. Vincent Medical Center", department: department || "Radiology" })
 
-    const endpoint = invite ? `/api/invites/${invite.token}/accept` : "/api/onboarding/complete"
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fullName,
-        clinicalRole: role,
-        hospitalName: name,
-        departmentName: department,
-      }),
-    })
-    const result = await response.json()
+    try {
+      const endpoint = invite ? `/api/invites/${invite.token}` : "/api/onboarding/complete"
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName,
+          clinicalRole: role,
+          hospitalName: name,
+          departmentName: department,
+        }),
+      })
+      const result = await readJson(response)
 
-    if (!response.ok) {
-      setError(result.error ?? "Could not complete onboarding.")
+      if (!response.ok) {
+        setError(result?.error ?? "Could not complete onboarding.")
+        return
+      }
+
+      if (!result?.profile || !result.organization || !result.department) {
+        setError("Could not complete onboarding.")
+        return
+      }
+
+      completeAuthState({
+        profile: result.profile,
+        organization: result.organization,
+        department: result.department,
+      })
+    } catch {
+      setError("Could not complete onboarding.")
+    } finally {
       setLoading(false)
-      return
     }
-
-    completeAuthState(result)
   }
 
   return (
@@ -145,4 +167,10 @@ function PipelineNode({
       </div>
     </div>
   )
+}
+
+async function readJson(response: Response): Promise<CompleteOnboardingResponse | null> {
+  const contentType = response.headers.get("content-type")
+  if (!contentType?.includes("application/json")) return null
+  return (await response.json()) as CompleteOnboardingResponse
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
-import { parseClinicalRole } from "@/lib/roles"
+import type { ClinicalRole } from "@/lib/supabase/types"
 
 type Context = {
   params: Promise<{ token: string }>
@@ -8,7 +8,6 @@ type Context = {
 
 type Payload = {
   fullName?: string
-  clinicalRole?: string
 }
 
 async function getInvite(token: string) {
@@ -46,7 +45,6 @@ export async function POST(request: Request, context: Context) {
 
   const body = (await request.json()) as Payload
   const fullName = body.fullName?.trim()
-  const clinicalRole = parseClinicalRole(body.clinicalRole ?? "")
 
   if (!fullName) {
     return NextResponse.json({ error: "Full name is required." }, { status: 400 })
@@ -59,7 +57,7 @@ export async function POST(request: Request, context: Context) {
         email: string
         organization_id: string
         department_id: string
-        clinical_role: typeof clinicalRole
+        clinical_role: ClinicalRole
         organizations: {
           id: string
           name: string
@@ -108,7 +106,7 @@ export async function POST(request: Request, context: Context) {
       full_name: fullName,
       email: user.email ?? invite.email,
       phone: existingProfile?.phone ?? null,
-      clinical_role: clinicalRole || invite.clinical_role,
+      clinical_role: invite.clinical_role,
       workspace_role: "participant",
       is_admin: false,
       organization_id: invite.organization_id,

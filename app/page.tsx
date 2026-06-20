@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server"
 import type { PendingInvite } from "@/lib/app-context"
 import type { DepartmentRecord, Invite, Organization, Profile } from "@/lib/supabase/types"
 import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
 
 export default async function Page() {
   const supabase = await createClient()
@@ -67,6 +68,10 @@ export default async function Page() {
         clinicalRole: inviteData.clinical_role,
       }
     }
+  }
+
+  if (user && invite && !profile?.onboarding_complete) {
+    redirect(`/invite/${invite.token}/onboarding`)
   }
 
   const fullName =
