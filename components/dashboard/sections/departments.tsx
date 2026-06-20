@@ -18,6 +18,7 @@ import {
   Check,
   Shield,
   Building2,
+  Crown,
   type LucideIcon,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -118,6 +119,22 @@ export function Departments() {
     await loadDepartments()
   }
 
+  async function grantAdmin(staffId: string) {
+    const response = await fetch(`/api/departments/members/${staffId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "grant_admin" }),
+    })
+    const result = await response.json()
+
+    if (!response.ok) {
+      setError(result.error ?? "Could not grant administrator access.")
+      return
+    }
+
+    await loadDepartments()
+  }
+
   const active = departments.find((department) => department.id === activeId) ?? null
 
   if (active) {
@@ -127,6 +144,7 @@ export function Departments() {
         isAdmin={isAdmin}
         onBack={() => setActiveId(null)}
         onKick={kick}
+        onGrantAdmin={grantAdmin}
         onInvite={loadDepartments}
       />
     )
@@ -141,10 +159,10 @@ export function Departments() {
               <Building2 className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Hospital organization</p>
+              <p className="text-sm text-muted-foreground">Department</p>
               <h2 className="text-2xl font-bold tracking-tight">{organizationName}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Select a department to view only the people assigned to that department.
+                Department cards are shown below. Select one to open its people cards.
               </p>
             </div>
           </div>
@@ -201,12 +219,14 @@ function DepartmentDetail({
   isAdmin,
   onBack,
   onKick,
+  onGrantAdmin,
   onInvite,
 }: {
   department: DirectoryDepartment
   isAdmin: boolean
   onBack: () => void
   onKick: (staffId: string) => void
+  onGrantAdmin: (staffId: string) => Promise<void>
   onInvite: () => void
 }) {
   const [modalOpen, setModalOpen] = useState(false)
@@ -233,6 +253,7 @@ function DepartmentDetail({
               <Icon className="h-6 w-6" />
             </div>
             <div>
+              <p className="text-sm text-muted-foreground">Department details</p>
               <h2 className="text-xl font-bold tracking-tight">{department.name}</h2>
               <p className="text-sm text-muted-foreground">
                 {department.hospital} · {department.location}
@@ -271,7 +292,13 @@ function DepartmentDetail({
                     <Badge variant="muted">{staffMembers.length}</Badge>
                   </div>
                   {staffMembers.map((staff) => (
-                    <MemberCard key={staff.id} staff={staff} isAdmin={isAdmin} onKick={onKick} />
+                    <MemberCard
+                      key={staff.id}
+                      staff={staff}
+                      isAdmin={isAdmin}
+                      onKick={onKick}
+                      onGrantAdmin={onGrantAdmin}
+                    />
                   ))}
                 </div>
               ))}
@@ -295,11 +322,24 @@ function MemberCard({
   staff,
   isAdmin,
   onKick,
+  onGrantAdmin,
 }: {
   staff: DirectoryMember
   isAdmin: boolean
   onKick: (staffId: string) => void
+  onGrantAdmin: (staffId: string) => Promise<void>
 }) {
+  const [granting, setGranting] = useState(false)
+
+  async function handleGrantAdmin() {
+    setGranting(true)
+    try {
+      await onGrantAdmin(staff.id)
+    } finally {
+      setGranting(false)
+    }
+  }
+
   return (
     <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-border bg-background p-4 transition-colors hover:bg-muted/40">
       <div className="min-w-48 flex-1">
@@ -337,12 +377,21 @@ function MemberCard({
       </div>
 
       {isAdmin && !staff.isAdmin && (
-        <button
-          onClick={() => onKick(staff.id)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-destructive transition-colors hover:border-destructive hover:bg-destructive/10"
-        >
-          <Trash2 className="h-3.5 w-3.5" /> Remove
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleGrantAdmin}
+            disabled={granting}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Crown className="h-3.5 w-3.5" /> {granting ? "Granting..." : "Grant Administrator"}
+          </button>
+          <button
+            onClick={() => onKick(staff.id)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-destructive transition-colors hover:border-destructive hover:bg-destructive/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Remove
+          </button>
+        </div>
       )}
     </div>
   )
