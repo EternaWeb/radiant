@@ -9,7 +9,7 @@ export const caseSelect = `
   ),
   case_assignments(
     *,
-    profiles(id, full_name, email, clinical_role)
+    profiles!case_assignments_profile_id_fkey(id, full_name, email, clinical_role)
   )
 `
 
