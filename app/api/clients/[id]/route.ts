@@ -93,3 +93,63 @@ export async function PATCH(request: Request, context: Context) {
 
   return NextResponse.json({ client: mapClientRows([data])[0] })
 }
+
+export async function DELETE(_request: Request, context: Context) {
+  const auth = await requireCompletedProfile()
+  if (isApiError(auth)) return auth
+
+  if (!auth.profile.is_admin) {
+    return NextResponse.json({ error: "Only admins can delete clients." }, { status: 403 })
+  }
+
+  const { id } = await context.params
+  const { data: client } = await auth.service
+    .from("clients")
+    .select("id")
+    .eq("id", id)
+    .eq("organization_id", auth.profile.organization_id!)
+    .maybeSingle()
+
+  if (!client) {
+    return NextResponse.json({ error: "Client not found." }, { status: 404 })
+  }
+
+  const { data: cases } = await auth.service
+    .from("cases")
+    .select("id")
+    .eq("client_id", id)
+    .eq("organization_id", auth.profile.organization_id!)
+  const caseIds = (cases ?? []).map((caseRow) => caseRow.id)
+
+  if (caseIds.length > 0) {
+    const { data: records } = await auth.service
+      .from("case_records")
+      .select("id")
+      .in("case_id", caseIds)
+      .eq("organization_id", auth.profile.organization_id!)
+    const recordIds = (records ?? []).map((record) => record.id)
+
+    if (recordIds.length > 0) {
+      const { data: images } = await auth.service
+        .from("case_images")
+        .select("storage_path")
+        .in("record_id", recordIds)
+      const storagePaths = (images ?? []).map((image) => image.storage_path).filter(Boolean)
+      if (storagePaths.length > 0) {
+        await auth.service.storage.from("studies").remove(storagePaths)
+      }
+    }
+  }
+
+  const { error } = await auth.service
+    .from("clients")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", auth.profile.organization_id!)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true })
+}

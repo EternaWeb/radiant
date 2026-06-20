@@ -82,3 +82,54 @@ export async function PATCH(request: Request, context: Context) {
   const [caseView] = await mapCaseRows(auth.service, rows ?? [])
   return NextResponse.json({ case: caseView })
 }
+
+export async function DELETE(_request: Request, context: Context) {
+  const auth = await requireCompletedProfile()
+  if (isApiError(auth)) return auth
+
+  if (!auth.profile.is_admin) {
+    return NextResponse.json({ error: "Only admins can delete cases." }, { status: 403 })
+  }
+
+  const { id } = await context.params
+  const { data: caseRow } = await auth.service
+    .from("cases")
+    .select("id")
+    .eq("id", id)
+    .eq("organization_id", auth.profile.organization_id!)
+    .maybeSingle()
+
+  if (!caseRow) {
+    return NextResponse.json({ error: "Case not found." }, { status: 404 })
+  }
+
+  const { data: records } = await auth.service
+    .from("case_records")
+    .select("id")
+    .eq("case_id", id)
+    .eq("organization_id", auth.profile.organization_id!)
+  const recordIds = (records ?? []).map((record) => record.id)
+
+  if (recordIds.length > 0) {
+    const { data: images } = await auth.service
+      .from("case_images")
+      .select("storage_path")
+      .in("record_id", recordIds)
+    const storagePaths = (images ?? []).map((image) => image.storage_path).filter(Boolean)
+    if (storagePaths.length > 0) {
+      await auth.service.storage.from("studies").remove(storagePaths)
+    }
+  }
+
+  const { error } = await auth.service
+    .from("cases")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", auth.profile.organization_id!)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true })
+}

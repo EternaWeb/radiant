@@ -112,6 +112,7 @@ const CASE_RECORD_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
 For case records, you may receive multiple labeled images from the same clinical visit. Treat the image label as clinical orientation context only; do not invent anatomy that is not visible.
 
 Also use the provided client background, current clinical checks, doctor notes, and prior case record summaries to produce a timeline-aware comparison.
+The summary must always be easy to read: use 2-3 short plain-language sentences that explain the record, the main concern, and the next workflow step.
 
 Output JSON schema:
 {
