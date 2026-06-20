@@ -1,602 +1,735 @@
 "use client"
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react"
 import {
-  ArrowLeft,
-  Bug,
   Check,
-  ClipboardList,
-  Contrast,
   FileText,
-  Layers,
   Loader2,
-  Ruler,
-  Share2,
+  Plus,
   Sparkles,
   Upload,
-  X,
-  ZoomIn,
+  Users,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useApp } from "@/lib/app-context"
 import { findingsToHeatmapBoxes, formatFindingLabel, formatFindingZone } from "@/lib/lung-zones"
-import type { StudyView } from "@/lib/studies"
-import { useStudies } from "@/lib/use-studies"
+import { useCases } from "@/lib/use-cases"
+import type { CaseImageLabel, ClinicalRole } from "@/lib/supabase/types"
+import type { CaseRecordView, CaseView } from "@/lib/cases"
 import { HeatmapViewer } from "../heatmap-viewer"
 import { RiskGauge } from "../risk-gauge"
-
-const tools = [
-  { icon: ZoomIn, label: "Zoom" },
-  { icon: Contrast, label: "Contrast" },
-  { icon: Layers, label: "Slices" },
-  { icon: Ruler, label: "Measure" },
-]
+import { BreadcrumbNav } from "../breadcrumb-nav"
+import { CaseTimeline } from "../case-timeline"
 
 const inputClass =
   "h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
 
-type DebugEntry = {
-  id: string
-  time: string
-  level: "info" | "success" | "warning" | "error"
-  title: string
-  details?: unknown
+const textareaClass =
+  "min-h-24 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
+
+const imageLabels: CaseImageLabel[] = ["front", "left", "right", "posterior", "lateral", "other"]
+
+type UploadImage = {
+  file: File
+  label: CaseImageLabel
+  labelNote: string
 }
 
-type ApiPayload = {
-  study?: StudyView
+type StaffMember = {
+  id: string
+  name: string
+  email: string
+  clinicalRole: ClinicalRole
+}
+
+type ApiPayload<T> = T & {
   error?: string
   debug?: unknown
 }
 
 export function PatientAnalysis() {
-  const { selectedPatient, setSelectedPatient } = useApp()
-  const { studies, loading, error, refresh } = useStudies()
-  const [approved, setApproved] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [analyzing, setAnalyzing] = useState(false)
+  const { selectedCase, selectedRecordId, setSelectedCase, setSelectedRecordId, openCase, isAdmin } = useApp()
+  const { cases, loading, error, refresh } = useCases()
   const [formError, setFormError] = useState<string | null>(null)
-  const [patientId, setPatientId] = useState("")
-  const [patientName, setPatientName] = useState("")
-  const [spo2, setSpo2] = useState("")
-  const [fever, setFever] = useState(false)
-  const [symptoms, setSymptoms] = useState("")
-  const [file, setFile] = useState<File | null>(null)
-  const [debugOpen, setDebugOpen] = useState(false)
-  const [debugEntries, setDebugEntries] = useState<DebugEntry[]>([])
+  const [busy, setBusy] = useState(false)
+  const [showRecordForm, setShowRecordForm] = useState(false)
+  const [staff, setStaff] = useState<StaffMember[]>([])
 
-  const patient = selectedPatient ?? studies[0] ?? null
-  const heatmapBoxes = patient ? findingsToHeatmapBoxes(patient.findings) : []
+  const activeCase = selectedCase ? cases.find((caseView) => caseView.id === selectedCase.id) ?? selectedCase : null
+  const selectedRecord =
+    activeCase?.records.find((record) => record.id === selectedRecordId) ?? activeCase?.records.at(-1) ?? null
 
   useEffect(() => {
-    setApproved(false)
-  }, [patient?.id])
+    if (!selectedCase) return
+    const fresh = cases.find((caseView) => caseView.id === selectedCase.id)
+    if (fresh) setSelectedCase(fresh)
+  }, [cases, selectedCase, setSelectedCase])
 
-  function appendDebug(entry: Omit<DebugEntry, "id" | "time">) {
-    setDebugEntries((current) => [
-      {
-        ...entry,
-        id: crypto.randomUUID(),
-        time: new Date().toLocaleTimeString(),
-      },
-      ...current,
-    ])
-  }
+  useEffect(() => {
+    if (!isAdmin) return
 
-  async function readApiPayload(response: Response): Promise<ApiPayload> {
-    const text = await response.text()
-
-    if (!text) {
-      return {}
+    async function loadStaff() {
+      const response = await fetch("/api/departments")
+      const payload = (await response.json()) as {
+        departments?: Array<{ staff?: StaffMember[] }>
+      }
+      const flattened = (payload.departments ?? []).flatMap((department) => department.staff ?? [])
+      setStaff(flattened)
     }
+
+    void loadStaff()
+  }, [isAdmin])
+
+  async function readPayload<T>(response: Response): Promise<ApiPayload<T>> {
+    const text = await response.text()
+    if (!text) return {} as ApiPayload<T>
 
     try {
-      return JSON.parse(text) as ApiPayload
+      return JSON.parse(text) as ApiPayload<T>
     } catch {
-      return {
-        error: "API returned a non-JSON response.",
-        debug: {
-          status: response.status,
-          statusText: response.statusText,
-          body: text.slice(0, 2000),
-        },
-      }
+      return { error: "API returned a non-JSON response." } as ApiPayload<T>
     }
   }
 
-  async function analyzeStudy(study: StudyView) {
-    setAnalyzing(true)
-    setFormError(null)
-    appendDebug({
-      level: "info",
-      title: "Analysis request started",
-      details: {
-        endpoint: `/api/studies/${study.id}/analyze`,
-        method: "POST",
-        studyId: study.id,
-        patientId: study.patientId,
-        currentStatus: study.rawStatus,
-      },
-    })
+  async function reloadCase(caseId: string) {
+    const response = await fetch(`/api/cases/${caseId}`)
+    const payload = await readPayload<{ case?: CaseView }>(response)
 
-    const response = await fetch(`/api/studies/${study.id}/analyze`, { method: "POST" })
-    const payload = await readApiPayload(response)
-
-    setAnalyzing(false)
-
-    if (!response.ok || !payload.study) {
-      setFormError(payload.error ?? "Analysis failed.")
-      setDebugOpen(true)
-      appendDebug({
-        level: "error",
-        title: "Analysis request failed",
-        details: {
-          status: response.status,
-          statusText: response.statusText,
-          error: payload.error,
-          debug: payload.debug,
-        },
-      })
-      return
+    if (response.ok && payload.case) {
+      setSelectedCase(payload.case)
     }
 
-    appendDebug({
-      level: "success",
-      title: "Analysis request completed",
-      details: {
-        status: response.status,
-        studyId: payload.study.id,
-        risk: payload.study.risk,
-        rawStatus: payload.study.rawStatus,
-        findings: payload.study.findings,
-        zoneOverlayCount: findingsToHeatmapBoxes(payload.study.findings).length,
-      },
-    })
-    setSelectedPatient(payload.study)
-    await refresh()
+    await refresh({ silent: true })
+    return payload.case ?? null
   }
 
-  async function handleUpload(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setFormError(null)
+  async function analyzeRecord(recordId: string) {
+    const response = await fetch(`/api/records/${recordId}/analyze`, { method: "POST" })
+    const payload = await readPayload<{ record?: CaseRecordView }>(response)
 
-    if (!file) {
-      setFormError("Choose a chest X-ray image first.")
-      appendDebug({
-        level: "warning",
-        title: "Upload blocked",
-        details: { reason: "No image file selected." },
-      })
-      return
+    if (!response.ok || !payload.record) {
+      throw new Error(payload.error ?? "Analysis failed.")
     }
 
-    setUploading(true)
-    appendDebug({
-      level: "info",
-      title: "Upload request started",
-      details: {
-        endpoint: "/api/studies/upload",
-        method: "POST",
-        patientId,
-        patientName,
-        file: {
-          name: file.name,
-          size: file.size,
-          type: file.type,
-        },
-        clinicalContext: {
-          spo2: spo2 || null,
-          fever,
-          symptoms: symptoms || null,
-        },
-      },
-    })
-    const body = new FormData()
-    body.set("image", file)
-    body.set("patientId", patientId)
-    body.set("patientName", patientName)
-    body.set("bodyPart", "Chest")
-    body.set("modality", "xray")
-    body.set("spo2", spo2)
-    body.set("fever", String(fever))
-    body.set("symptoms", symptoms)
-
-    const response = await fetch("/api/studies/upload", {
-      method: "POST",
-      body,
-    })
-    const payload = await readApiPayload(response)
-
-    setUploading(false)
-
-    if (!response.ok || !payload.study) {
-      setFormError(payload.error ?? "Upload failed.")
-      setDebugOpen(true)
-      appendDebug({
-        level: "error",
-        title: "Upload request failed",
-        details: {
-          status: response.status,
-          statusText: response.statusText,
-          error: payload.error,
-          debug: payload.debug,
-        },
-      })
-      return
-    }
-
-    appendDebug({
-      level: "success",
-      title: "Upload request completed",
-      details: {
-        status: response.status,
-        studyId: payload.study.id,
-        patientId: payload.study.patientId,
-        imageUrlPresent: Boolean(payload.study.image),
-      },
-    })
-    setSelectedPatient(payload.study)
-    setFile(null)
-    await refresh()
-    await analyzeStudy(payload.study)
+    return payload.record
   }
 
   return (
     <div className="flex flex-col gap-5">
-      <UploadCard
-        patientId={patientId}
-        patientName={patientName}
-        spo2={spo2}
-        fever={fever}
-        symptoms={symptoms}
-        file={file}
-        uploading={uploading}
-        analyzing={analyzing}
-        error={formError}
-        debugCount={debugEntries.length}
-        onSubmit={handleUpload}
-        onPatientIdChange={setPatientId}
-        onPatientNameChange={setPatientName}
-        onSpo2Change={setSpo2}
-        onFeverChange={setFever}
-        onSymptomsChange={setSymptoms}
-        onFileChange={setFile}
-        onDebugOpen={() => setDebugOpen(true)}
-      />
-
-      <DebugModal
-        open={debugOpen}
-        entries={debugEntries}
-        onClose={() => setDebugOpen(false)}
-        onClear={() => setDebugEntries([])}
+      <BreadcrumbNav
+        items={[
+          { label: "Clients", onClick: () => setSelectedCase(null) },
+          ...(activeCase
+            ? [
+                { label: activeCase.client.name, onClick: () => setSelectedRecordId(null) },
+                { label: activeCase.title, onClick: () => setSelectedRecordId(null) },
+                ...(selectedRecord ? [{ label: `Record #${selectedRecord.recordNumber}` }] : []),
+              ]
+            : []),
+        ]}
       />
 
       {error && <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      {formError && <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formError}</p>}
 
-      {!patient && (
-        <Card>
-          <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            {loading ? "Loading studies..." : "Upload a chest X-ray to start AI analysis."}
-          </CardContent>
-        </Card>
-      )}
+      <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
+        <div className="flex flex-col gap-5">
+          <CreateClientCaseCard
+            busy={busy}
+            onSubmit={async (form) => {
+              setBusy(true)
+              setFormError(null)
 
-      {patient && (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              {selectedPatient && (
-                <button
-                  onClick={() => setSelectedPatient(null)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </button>
-              )}
-              <div>
-                <h2 className="text-xl font-bold tracking-tight">{patient.name}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {patient.patientId} · {patient.modality} · {patient.bodyPart} · {patient.date}
-                </p>
-              </div>
-            </div>
-            <Badge variant={riskVariant(patient.risk)}>{patient.status}</Badge>
-          </div>
+              try {
+                const clientResponse = await fetch("/api/clients", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(form.client),
+                })
+                const clientPayload = await readPayload<{ client?: { id: string } }>(clientResponse)
+                if (!clientResponse.ok || !clientPayload.client) {
+                  throw new Error(clientPayload.error ?? "Could not create client.")
+                }
 
-          <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                {tools.map(({ icon: Icon, label }) => (
-                  <button
-                    key={label}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  >
-                    <Icon className="h-4 w-4" /> {label}
-                  </button>
-                ))}
-              </div>
-              <HeatmapViewer image={patient.image} heatmapImage={patient.heatmapImage} boxes={heatmapBoxes} />
-            </div>
+                const caseResponse = await fetch(`/api/clients/${clientPayload.client.id}/cases`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ title: form.caseTitle }),
+                })
+                const casePayload = await readPayload<{ case?: CaseView }>(caseResponse)
+                if (!caseResponse.ok || !casePayload.case) {
+                  throw new Error(casePayload.error ?? "Could not create case.")
+                }
 
-            <div className="flex flex-col gap-5">
-              <Card>
-                <CardContent className="p-5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="flex items-center gap-2 font-semibold">
-                      <Sparkles className="h-4 w-4 text-primary" /> AI Findings
-                    </h3>
-                    {patient.rawStatus !== "analyzed" && patient.rawStatus !== "critical" && (
-                      <Button size="sm" onClick={() => analyzeStudy(patient)} disabled={analyzing} data-icon="inline-start">
-                        {analyzing ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Sparkles data-icon="inline-start" />}
-                        Analyze
-                      </Button>
-                    )}
-                  </div>
-                  <ul className="mt-4 flex flex-col gap-3">
-                    {patient.findings.length === 0 && (
-                      <li className="text-sm text-muted-foreground">Run GPT-4o Vision analysis to generate structured findings and lung-zone overlays.</li>
-                    )}
-                    {patient.findings.map((f) => (
-                      <li key={`${f.label}-${f.zone}`} className="rounded-lg border border-border bg-background p-3">
-                        <div className="mb-1 flex items-center justify-between text-sm">
-                          <span className="font-medium">{formatFindingLabel(f.label)}</span>
-                          <span className="tabular-nums text-muted-foreground">{f.confidence}%</span>
-                        </div>
-                        <p className="mb-2 text-xs text-muted-foreground">
-                          Zone: <span className="font-medium text-foreground/80">{formatFindingZone(f.zone)}</span>
-                        </p>
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                          <div className="h-full rounded-full bg-destructive" style={{ width: `${f.confidence}%` }} />
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
+                openCase(casePayload.case)
+                await refresh()
+              } catch (error) {
+                setFormError(error instanceof Error ? error.message : "Could not create client case.")
+              } finally {
+                setBusy(false)
+              }
+            }}
+          />
 
-              <Card>
-                <CardContent className="flex flex-col items-center p-5">
-                  <h3 className="mb-2 self-start font-semibold">Risk Score</h3>
-                  <RiskGauge score={patient.risk} />
-                  {patient.clinicalContext && (
-                    <p className="mt-2 text-center text-xs text-muted-foreground">
-                      Clinical modifiers: SpO2 {patient.clinicalContext.spo2 ?? "n/a"} · Fever{" "}
-                      {patient.clinicalContext.fever ? "yes" : "no"}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+          <CaseListCard cases={cases} loading={loading} activeCaseId={activeCase?.id ?? null} onOpen={openCase} />
+        </div>
 
-          <Card>
-            <CardContent className="p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="flex items-center gap-2 font-semibold">
-                  <FileText className="h-4 w-4 text-primary" /> Structured Diagnostic Report
-                </h3>
-                <Badge variant="muted">
-                  <Sparkles className="h-3 w-3" /> AI assisted
-                </Badge>
-              </div>
+        <div className="flex min-w-0 flex-col gap-5">
+          {!activeCase && (
+            <Card>
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                Create a client case or select an existing case to review its record timeline.
+              </CardContent>
+            </Card>
+          )}
 
-              <div className="grid gap-5 text-sm leading-relaxed sm:grid-cols-2">
-                <ReportBlock title="Summary" body={patient.summary} />
-                <ReportBlock
-                  title="Findings"
-                  body={
-                    patient.findings
-                      .map((f) => `${formatFindingLabel(f.label)} (${formatFindingZone(f.zone)}, ${f.confidence}%)`)
-                      .join("; ") || "Awaiting GPT-4o Vision analysis."
-                  }
+          {activeCase && (
+            <>
+              <CaseHeader caseView={activeCase} selectedRecord={selectedRecord} />
+
+              <CaseTimeline
+                records={activeCase.records}
+                selectedRecordId={selectedRecord?.id ?? null}
+                onSelect={setSelectedRecordId}
+                onAdd={() => setShowRecordForm(true)}
+              />
+
+              {showRecordForm && (
+                <AddRecordCard
+                  busy={busy}
+                  onCancel={() => setShowRecordForm(false)}
+                  onSubmit={async ({ notes, clinicalChecks, images }) => {
+                    if (images.length === 0) {
+                      setFormError("Upload at least one labeled image for this record.")
+                      return
+                    }
+
+                    setBusy(true)
+                    setFormError(null)
+
+                    try {
+                      const recordResponse = await fetch(`/api/cases/${activeCase.id}/records`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          notes,
+                          clinicalChecks,
+                          modality: "xray",
+                          bodyPart: "Chest",
+                        }),
+                      })
+                      const recordPayload = await readPayload<{ record?: CaseRecordView }>(recordResponse)
+                      if (!recordResponse.ok || !recordPayload.record) {
+                        throw new Error(recordPayload.error ?? "Could not create record.")
+                      }
+
+                      const imageBody = new FormData()
+                      for (const image of images) {
+                        imageBody.append("images", image.file)
+                      }
+                      imageBody.set("labels", JSON.stringify(images.map((image) => image.label)))
+                      imageBody.set("labelNotes", JSON.stringify(images.map((image) => image.labelNote)))
+
+                      const imageResponse = await fetch(`/api/records/${recordPayload.record.id}/images`, {
+                        method: "POST",
+                        body: imageBody,
+                      })
+                      const imagePayload = await readPayload<{ record?: CaseRecordView }>(imageResponse)
+                      if (!imageResponse.ok || !imagePayload.record) {
+                        throw new Error(imagePayload.error ?? "Could not upload record images.")
+                      }
+
+                      await analyzeRecord(recordPayload.record.id)
+                      setSelectedRecordId(recordPayload.record.id)
+                      await reloadCase(activeCase.id)
+                      setShowRecordForm(false)
+                    } catch (error) {
+                      setFormError(error instanceof Error ? error.message : "Could not analyze record.")
+                      await reloadCase(activeCase.id)
+                    } finally {
+                      setBusy(false)
+                    }
+                  }}
                 />
-                <ReportBlock title="Comparison" body={patient.comparison} />
-                <ReportBlock title="Recommendation" body={patient.recommendation} />
-              </div>
-              <p className="mt-4 text-xs text-muted-foreground">{patient.disclaimer}</p>
+              )}
 
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Button size="lg" className="h-10 px-5" onClick={() => setApproved(true)} disabled={approved} data-icon="inline-start">
-                  <Check data-icon="inline-start" />
-                  {approved ? "Approved & Saved" : "Approve & Save"}
-                </Button>
-                <Button variant="outline" size="lg" className="h-10 px-5" data-icon="inline-start">
-                  <Share2 data-icon="inline-start" /> Share with departments
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </>
-      )}
+              {isAdmin && (
+                <AssignmentCard
+                  caseView={activeCase}
+                  staff={staff}
+                  busy={busy}
+                  onAssign={async (profileId) => {
+                    setBusy(true)
+                    setFormError(null)
+                    try {
+                      const response = await fetch(`/api/cases/${activeCase.id}/assignments`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ profileId, role: "primary" }),
+                      })
+                      const payload = await readPayload<{ case?: CaseView }>(response)
+                      if (!response.ok || !payload.case) {
+                        throw new Error(payload.error ?? "Could not assign doctor.")
+                      }
+                      setSelectedCase(payload.case)
+                      await refresh({ silent: true })
+                    } catch (error) {
+                      setFormError(error instanceof Error ? error.message : "Could not assign doctor.")
+                    } finally {
+                      setBusy(false)
+                    }
+                  }}
+                />
+              )}
+
+              {selectedRecord && <RecordAnalysis record={selectedRecord} onAnalyze={() => analyzeRecord(selectedRecord.id).then(() => reloadCase(activeCase.id))} />}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
 
-function UploadCard({
-  patientId,
-  patientName,
-  spo2,
-  fever,
-  symptoms,
-  file,
-  uploading,
-  analyzing,
-  error,
-  debugCount,
+function CreateClientCaseCard({
+  busy,
   onSubmit,
-  onPatientIdChange,
-  onPatientNameChange,
-  onSpo2Change,
-  onFeverChange,
-  onSymptomsChange,
-  onFileChange,
-  onDebugOpen,
 }: {
-  patientId: string
-  patientName: string
-  spo2: string
-  fever: boolean
-  symptoms: string
-  file: File | null
-  uploading: boolean
-  analyzing: boolean
-  error: string | null
-  debugCount: number
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void
-  onPatientIdChange: (value: string) => void
-  onPatientNameChange: (value: string) => void
-  onSpo2Change: (value: string) => void
-  onFeverChange: (value: boolean) => void
-  onSymptomsChange: (value: string) => void
-  onFileChange: (value: File | null) => void
-  onDebugOpen: () => void
+  busy: boolean
+  onSubmit: (form: {
+    client: {
+      firstName: string
+      lastName: string
+      dateOfBirth: string
+      previousHospitals: string[]
+      traumaHistory: string
+      notes: string
+      firstVisitDate: string
+    }
+    caseTitle: string
+  }) => void
 }) {
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [dateOfBirth, setDateOfBirth] = useState("")
+  const [previousHospitals, setPreviousHospitals] = useState("")
+  const [traumaHistory, setTraumaHistory] = useState("")
+  const [notes, setNotes] = useState("")
+  const [firstVisitDate, setFirstVisitDate] = useState("")
+  const [caseTitle, setCaseTitle] = useState("")
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    onSubmit({
+      client: {
+        firstName,
+        lastName,
+        dateOfBirth,
+        previousHospitals: previousHospitals
+          .split(",")
+          .map((hospital) => hospital.trim())
+          .filter(Boolean),
+        traumaHistory,
+        notes,
+        firstVisitDate,
+      },
+      caseTitle,
+    })
+  }
+
   return (
     <Card>
       <CardContent className="p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="font-semibold">Upload & GPT-4o Vision Analysis</h3>
-            <p className="text-xs text-muted-foreground">Uploads are archived in PACS, analyzed by GPT-4o Vision, and rendered as zone-aware decision support.</p>
-          </div>
-          <Button type="button" variant="outline" onClick={onDebugOpen} data-icon="inline-start">
-            <Bug data-icon="inline-start" />
-            Debug
-            {debugCount > 0 && (
-              <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                {debugCount}
-              </span>
-            )}
-          </Button>
+        <div className="mb-4">
+          <h3 className="font-semibold">Create client case</h3>
+          <p className="text-xs text-muted-foreground">New clients receive an auto-generated AM code.</p>
         </div>
-        <form onSubmit={onSubmit} className="grid gap-3 lg:grid-cols-[1fr_1fr_120px_120px_1.2fr_auto] lg:items-end">
-          <Field label="Patient ID">
-            <input value={patientId} onChange={(event) => onPatientIdChange(event.target.value)} required placeholder="PT-10421" className={inputClass} />
-          </Field>
-          <Field label="Patient name">
-            <input value={patientName} onChange={(event) => onPatientNameChange(event.target.value)} required placeholder="Patient name" className={inputClass} />
-          </Field>
-          <Field label="SpO2">
-            <input value={spo2} onChange={(event) => onSpo2Change(event.target.value)} inputMode="numeric" placeholder="94" className={inputClass} />
-          </Field>
-          <label className="flex h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm">
-            <input type="checkbox" checked={fever} onChange={(event) => onFeverChange(event.target.checked)} />
-            Fever
-          </label>
-          <Field label="Symptoms">
-            <input value={symptoms} onChange={(event) => onSymptomsChange(event.target.value)} placeholder="fever, cough" className={inputClass} />
-          </Field>
-          <div className="flex flex-col gap-2">
-            <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted">
-              <Upload className="h-4 w-4" />
-              {file ? "Selected" : "Image"}
-              <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(event) => onFileChange(event.target.files?.[0] ?? null)} />
-            </label>
-            <Button type="submit" disabled={uploading || analyzing} data-icon="inline-start">
-              {uploading || analyzing ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Sparkles data-icon="inline-start" />}
-              {uploading ? "Uploading" : analyzing ? "Analyzing" : "Upload & analyze"}
-            </Button>
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="First name">
+              <input value={firstName} onChange={(event) => setFirstName(event.target.value)} required className={inputClass} />
+            </Field>
+            <Field label="Surname">
+              <input value={lastName} onChange={(event) => setLastName(event.target.value)} required className={inputClass} />
+            </Field>
           </div>
+          <Field label="Date of birth">
+            <input type="date" value={dateOfBirth} onChange={(event) => setDateOfBirth(event.target.value)} required className={inputClass} />
+          </Field>
+          <Field label="First visit date">
+            <input type="date" value={firstVisitDate} onChange={(event) => setFirstVisitDate(event.target.value)} className={inputClass} />
+          </Field>
+          <Field label="Previous hospitals">
+            <input value={previousHospitals} onChange={(event) => setPreviousHospitals(event.target.value)} placeholder="City Hospital, General Clinic" className={inputClass} />
+          </Field>
+          <Field label="Trauma history">
+            <textarea value={traumaHistory} onChange={(event) => setTraumaHistory(event.target.value)} className={textareaClass} />
+          </Field>
+          <Field label="Client notes">
+            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} className={textareaClass} />
+          </Field>
+          <Field label="Case title">
+            <input value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} placeholder="Respiratory follow-up" className={inputClass} />
+          </Field>
+          <Button type="submit" disabled={busy} data-icon="inline-start">
+            {busy ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
+            Create case
+          </Button>
         </form>
-        {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
       </CardContent>
     </Card>
   )
 }
 
-function DebugModal({
-  open,
-  entries,
-  onClose,
-  onClear,
+function CaseListCard({
+  cases,
+  loading,
+  activeCaseId,
+  onOpen,
 }: {
-  open: boolean
-  entries: DebugEntry[]
-  onClose: () => void
-  onClear: () => void
+  cases: CaseView[]
+  loading: boolean
+  activeCaseId: string | null
+  onOpen: (caseView: CaseView) => void
 }) {
-  const [copied, setCopied] = useState(false)
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <h3 className="mb-3 font-semibold">Open cases</h3>
+        <div className="flex flex-col gap-2">
+          {cases.map((caseView) => {
+            const latest = caseView.records.at(-1)
+            return (
+              <button
+                key={caseView.id}
+                type="button"
+                onClick={() => onOpen(caseView)}
+                className={`rounded-lg border p-3 text-left transition-colors ${
+                  activeCaseId === caseView.id ? "border-primary bg-primary/10" : "border-border bg-background hover:bg-muted/50"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{caseView.client.name}</p>
+                  <Badge variant={latest ? riskVariant(latest.risk) : "muted"}>{latest ? `${latest.risk}%` : "No record"}</Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {caseView.client.clientCode} · {caseView.title}
+                </p>
+              </button>
+            )
+          })}
+          {cases.length === 0 && (
+            <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+              {loading ? "Loading cases..." : "No cases created yet."}
+            </p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
-  if (!open) return null
+function CaseHeader({ caseView, selectedRecord }: { caseView: CaseView; selectedRecord: CaseRecordView | null }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 className="text-xl font-bold tracking-tight">{caseView.client.name}</h2>
+        <p className="text-sm text-muted-foreground">
+          {caseView.client.clientCode} · Age {caseView.client.age} · {caseView.title}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Previous hospitals: {caseView.client.previousHospitals.join(", ") || "None recorded"}
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Badge variant={caseView.status === "open" ? "success" : "muted"}>{caseView.status}</Badge>
+        {selectedRecord && <Badge variant={riskVariant(selectedRecord.risk)}>{selectedRecord.status}</Badge>}
+      </div>
+    </div>
+  )
+}
 
-  const serialized = JSON.stringify(entries, null, 2)
+function AddRecordCard({
+  busy,
+  onSubmit,
+  onCancel,
+}: {
+  busy: boolean
+  onSubmit: (payload: { notes: string; clinicalChecks: Record<string, unknown>; images: UploadImage[] }) => void
+  onCancel: () => void
+}) {
+  const [notes, setNotes] = useState("")
+  const [spo2, setSpo2] = useState("")
+  const [fever, setFever] = useState(false)
+  const [cough, setCough] = useState(false)
+  const [shortnessOfBreath, setShortnessOfBreath] = useState(false)
+  const [chestPain, setChestPain] = useState(false)
+  const [additionalSymptoms, setAdditionalSymptoms] = useState("")
+  const [images, setImages] = useState<UploadImage[]>([])
 
-  async function copyDebugLog() {
-    await navigator.clipboard.writeText(serialized)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1500)
+  function setFiles(files: FileList | null) {
+    const defaults: CaseImageLabel[] = ["front", "left", "right", "lateral"]
+    setImages(
+      Array.from(files ?? []).map((file, index) => ({
+        file,
+        label: defaults[index] ?? "other",
+        labelNote: "",
+      })),
+    )
+  }
+
+  function updateImage(index: number, patch: Partial<UploadImage>) {
+    setImages((current) => current.map((image, imageIndex) => (imageIndex === index ? { ...image, ...patch } : image)))
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    onSubmit({
+      notes,
+      clinicalChecks: {
+        spo2: spo2 ? Number(spo2) : null,
+        fever,
+        cough,
+        shortnessOfBreath,
+        chestPain,
+        additionalSymptoms,
+      },
+      images,
+    })
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
-          <div>
-            <h2 className="flex items-center gap-2 text-lg font-bold">
-              <Bug className="h-5 w-5 text-primary" /> AI Pipeline Debug
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Send the latest failed entry when you share the errors. No API keys are logged here.
-            </p>
+    <Card>
+      <CardContent className="p-5">
+        <div className="mb-4">
+          <h3 className="font-semibold">Add new record</h3>
+          <p className="text-xs text-muted-foreground">Each record is a fresh AI run with new notes, checks, and labeled images.</p>
+        </div>
+        <form onSubmit={submit} className="flex flex-col gap-4">
+          <Field label="Doctor notes">
+            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} className={textareaClass} />
+          </Field>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <Field label="SpO2">
+              <input value={spo2} onChange={(event) => setSpo2(event.target.value)} inputMode="numeric" placeholder="94" className={inputClass} />
+            </Field>
+            <CheckBox label="Fever" checked={fever} onChange={setFever} />
+            <CheckBox label="Cough" checked={cough} onChange={setCough} />
+            <CheckBox label="Shortness of breath" checked={shortnessOfBreath} onChange={setShortnessOfBreath} />
+            <CheckBox label="Chest pain" checked={chestPain} onChange={setChestPain} />
           </div>
+
+          <Field label="Additional symptoms">
+            <input value={additionalSymptoms} onChange={(event) => setAdditionalSymptoms(event.target.value)} placeholder="free-text context" className={inputClass} />
+          </Field>
+
+          <div className="rounded-lg border border-border bg-background p-3">
+            <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-medium transition-colors hover:bg-muted">
+              <Upload className="h-4 w-4" />
+              Select images
+              <input type="file" multiple accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(event) => setFiles(event.target.files)} />
+            </label>
+            <div className="mt-3 flex flex-col gap-2">
+              {images.map((image, index) => (
+                <div key={`${image.file.name}-${index}`} className="grid gap-2 rounded-lg border border-border p-3 md:grid-cols-[1fr_150px_1fr]">
+                  <p className="truncate text-sm font-medium">{image.file.name}</p>
+                  <select value={image.label} onChange={(event) => updateImage(index, { label: event.target.value as CaseImageLabel })} className={inputClass}>
+                    {imageLabels.map((label) => (
+                      <option key={label} value={label}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <input value={image.labelNote} onChange={(event) => updateImage(index, { labelNote: event.target.value })} placeholder="label note" className={inputClass} />
+                </div>
+              ))}
+              {images.length === 0 && <p className="text-sm text-muted-foreground">No images selected yet.</p>}
+            </div>
+          </div>
+
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={copyDebugLog} data-icon="inline-start">
-              <ClipboardList data-icon="inline-start" />
-              {copied ? "Copied" : "Copy log"}
+            <Button type="submit" disabled={busy} data-icon="inline-start">
+              {busy ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Sparkles data-icon="inline-start" />}
+              Add & analyze
             </Button>
-            <Button type="button" variant="outline" onClick={onClear}>
-              Clear
-            </Button>
-            <Button type="button" variant="ghost" onClick={onClose} size="icon">
-              <X className="h-4 w-4" />
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancel
             </Button>
           </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
+function AssignmentCard({
+  caseView,
+  staff,
+  busy,
+  onAssign,
+}: {
+  caseView: CaseView
+  staff: StaffMember[]
+  busy: boolean
+  onAssign: (profileId: string) => void
+}) {
+  const assignedIds = new Set(caseView.assignments.map((assignment) => assignment.profileId))
+  const available = staff.filter((member) => !assignedIds.has(member.id))
+  const [profileId, setProfileId] = useState("")
+
+  useEffect(() => {
+    setProfileId(available[0]?.id ?? "")
+  }, [available])
+
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="flex items-center gap-2 font-semibold">
+            <Users className="h-4 w-4 text-primary" /> Assigned doctors
+          </h3>
+          <Badge variant="muted">{caseView.assignments.length} assigned</Badge>
+        </div>
+        <div className="mb-4 flex flex-wrap gap-2">
+          {caseView.assignments.map((assignment) => (
+            <Badge key={assignment.id} variant={assignment.assignmentRole === "emergency" ? "danger" : "default"}>
+              {assignment.name} · {assignment.assignmentRole}
+            </Badge>
+          ))}
+          {caseView.assignments.length === 0 && <p className="text-sm text-muted-foreground">No doctors assigned yet.</p>}
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <select value={profileId} onChange={(event) => setProfileId(event.target.value)} className={inputClass}>
+            {available.map((member) => (
+              <option key={member.id} value={member.id}>
+                {member.name} · {member.clinicalRole}
+              </option>
+            ))}
+          </select>
+          <Button type="button" disabled={busy || !profileId} onClick={() => onAssign(profileId)}>
+            Assign primary
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function RecordAnalysis({ record, onAnalyze }: { record: CaseRecordView; onAnalyze: () => Promise<unknown> }) {
+  const [approved, setApproved] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
+  const boxes = useMemo(() => findingsToHeatmapBoxes(record.findings), [record.findings])
+
+  async function runAnalyze() {
+    setAnalyzing(true)
+    try {
+      await onAnalyze()
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2">
+            {record.images.map((image) => (
+              <Badge key={image.id} variant="muted">
+                {image.label}{image.labelNote ? ` · ${image.labelNote}` : ""}
+              </Badge>
+            ))}
+          </div>
+          <HeatmapViewer image={record.image} heatmapImage={record.heatmapImage} boxes={boxes} />
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-0 overflow-hidden lg:grid-cols-[340px_1fr]">
-          <div className="overflow-y-auto border-b border-border p-4 lg:border-b-0 lg:border-r">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Timeline ({entries.length})
-            </p>
-            {entries.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                No debug events yet. Upload or analyze a study to populate this log.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {entries.map((entry) => (
-                  <div key={entry.id} className="rounded-lg border border-border bg-card p-3">
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                          entry.level === "error"
-                            ? "bg-destructive/15 text-destructive"
-                            : entry.level === "success"
-                              ? "bg-success/15 text-success"
-                              : entry.level === "warning"
-                                ? "bg-warning/15 text-warning"
-                                : "bg-primary/15 text-primary"
-                        }`}
-                      >
-                        {entry.level}
-                      </span>
-                      <span className="text-xs text-muted-foreground">{entry.time}</span>
-                    </div>
-                    <p className="text-sm font-semibold">{entry.title}</p>
-                  </div>
-                ))}
+        <div className="flex flex-col gap-5">
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between">
+                <h3 className="flex items-center gap-2 font-semibold">
+                  <Sparkles className="h-4 w-4 text-primary" /> AI Findings
+                </h3>
+                {record.rawStatus !== "analyzed" && record.rawStatus !== "critical" && (
+                  <Button size="sm" onClick={runAnalyze} disabled={analyzing} data-icon="inline-start">
+                    {analyzing ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Sparkles data-icon="inline-start" />}
+                    Analyze
+                  </Button>
+                )}
               </div>
-            )}
-          </div>
+              <ul className="mt-4 flex flex-col gap-3">
+                {record.findings.length === 0 && (
+                  <li className="text-sm text-muted-foreground">Run GPT-4o Vision analysis to generate structured findings and lung-zone overlays.</li>
+                )}
+                {record.findings.map((finding) => (
+                  <li key={`${finding.label}-${finding.zone}`} className="rounded-lg border border-border bg-background p-3">
+                    <div className="mb-1 flex items-center justify-between text-sm">
+                      <span className="font-medium">{formatFindingLabel(finding.label)}</span>
+                      <span className="tabular-nums text-muted-foreground">{finding.confidence}%</span>
+                    </div>
+                    <p className="mb-2 text-xs text-muted-foreground">
+                      Zone: <span className="font-medium text-foreground/80">{formatFindingZone(finding.zone)}</span>
+                    </p>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-destructive" style={{ width: `${finding.confidence}%` }} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
 
-          <div className="min-h-0 overflow-y-auto bg-black p-4 text-xs text-green-100">
-            <pre className="whitespace-pre-wrap break-words">{serialized || "[]"}</pre>
-          </div>
+          <Card>
+            <CardContent className="flex flex-col items-center p-5">
+              <h3 className="mb-2 self-start font-semibold">Risk Score</h3>
+              <RiskGauge score={record.risk} />
+              <p className="mt-2 text-center text-xs text-muted-foreground">
+                SpO2 {record.clinicalChecks.spo2 ?? "n/a"} · Fever {record.clinicalChecks.fever ? "yes" : "no"} · Cough{" "}
+                {record.clinicalChecks.cough ? "yes" : "no"}
+              </p>
+            </CardContent>
+          </Card>
         </div>
       </div>
-    </div>
+
+      <Card>
+        <CardContent className="p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 font-semibold">
+              <FileText className="h-4 w-4 text-primary" /> Structured Diagnostic Report
+            </h3>
+            <Badge variant="muted">
+              <Sparkles className="h-3 w-3" /> AI assisted
+            </Badge>
+          </div>
+
+          <div className="grid gap-5 text-sm leading-relaxed sm:grid-cols-2">
+            <ReportBlock title="Summary" body={record.summary} />
+            <ReportBlock
+              title="Findings"
+              body={
+                record.findings
+                  .map((finding) => `${formatFindingLabel(finding.label)} (${formatFindingZone(finding.zone)}, ${finding.confidence}%)`)
+                  .join("; ") || "Awaiting GPT-4o Vision analysis."
+              }
+            />
+            <ReportBlock title="Timeline comparison" body={record.comparison} />
+            <ReportBlock title="Recommendation" body={record.recommendation} />
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground">{record.disclaimer}</p>
+
+          <div className="mt-5">
+            <Button size="lg" className="h-10 px-5" onClick={() => setApproved(true)} disabled={approved} data-icon="inline-start">
+              <Check data-icon="inline-start" />
+              {approved ? "Approved & Saved" : "Approve & Save"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </>
   )
 }
 
@@ -605,6 +738,15 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     <label className="flex flex-col gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
       {label}
       {children}
+    </label>
+  )
+}
+
+function CheckBox({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <label className="flex h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm">
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      {label}
     </label>
   )
 }

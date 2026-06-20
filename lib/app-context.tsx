@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, type ReactNode } from "react"
-import type { StudyView } from "@/lib/studies"
+import type { CaseView } from "@/lib/cases"
 import type { ClinicalRole, DepartmentRecord, Organization, Profile } from "@/lib/supabase/types"
 
 export type Stage = "welcome" | "login" | "profile" | "role" | "setup" | "readiness" | "app"
@@ -57,9 +57,11 @@ type AppState = {
     department: DepartmentRecord
   }) => void
   resetAuthState: () => void
-  selectedPatient: StudyView | null
-  setSelectedPatient: (p: StudyView | null) => void
-  openPatient: (p: StudyView) => void
+  selectedCase: CaseView | null
+  selectedRecordId: string | null
+  setSelectedCase: (caseView: CaseView | null) => void
+  setSelectedRecordId: (recordId: string | null) => void
+  openCase: (caseView: CaseView, recordId?: string | null) => void
 }
 
 const Ctx = createContext<AppState | null>(null)
@@ -100,10 +102,12 @@ export function AppProvider({
   const [profile, setProfile] = useState<Profile | null>(initialProfile)
   const [organization, setOrganization] = useState<Organization | null>(initialOrganization)
   const [department, setDepartment] = useState<DepartmentRecord | null>(initialDepartment)
-  const [selectedPatient, setSelectedPatient] = useState<StudyView | null>(null)
+  const [selectedCase, setSelectedCase] = useState<CaseView | null>(null)
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null)
 
-  function openPatient(p: StudyView) {
-    setSelectedPatient(p)
+  function openCase(caseView: CaseView, recordId?: string | null) {
+    setSelectedCase(caseView)
+    setSelectedRecordId(recordId ?? caseView.records.at(-1)?.id ?? null)
     setSection("imaging")
   }
 
@@ -124,7 +128,8 @@ export function AppProvider({
     setProfile(null)
     setOrganization(null)
     setDepartment(null)
-    setSelectedPatient(null)
+    setSelectedCase(null)
+    setSelectedRecordId(null)
     setHospital({ name: "St. Vincent Medical Center", department: "Radiology" })
   }
 
@@ -152,9 +157,11 @@ export function AppProvider({
         isAdmin: profile?.is_admin ?? false,
         completeAuthState,
         resetAuthState,
-        selectedPatient,
-        setSelectedPatient,
-        openPatient,
+        selectedCase,
+        selectedRecordId,
+        setSelectedCase,
+        setSelectedRecordId,
+        openCase,
       }}
     >
       {children}

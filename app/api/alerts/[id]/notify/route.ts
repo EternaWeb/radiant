@@ -23,7 +23,7 @@ export async function POST(request: Request, context: Context) {
 
   const [{ data: alert, error: alertError }, { data: department, error: departmentError }] = await Promise.all([
     (auth.service.from("alerts") as any)
-      .select("*, studies(*, patients(external_id))")
+      .select("*, studies(*, patients(external_id)), case_records(*, cases(*, clients(*)))")
       .eq("id", id)
       .eq("organization_id", auth.profile.organization_id!)
       .single(),
@@ -41,17 +41,26 @@ export async function POST(request: Request, context: Context) {
 
   const alertRow = alert as any
 
-  const { error: shareError } = await auth.service.from("study_shares").upsert(
-    {
-      study_id: alertRow.study_id,
-      department_id: department.id,
-      shared_by: auth.userId,
-    },
-    { onConflict: "study_id,department_id" },
-  )
+  const shareResult = alertRow.case_records?.case_id
+    ? await auth.service.from("case_shares").upsert(
+        {
+          case_id: alertRow.case_records.case_id,
+          department_id: department.id,
+          shared_by: auth.userId,
+        },
+        { onConflict: "case_id,department_id" },
+      )
+    : await auth.service.from("study_shares").upsert(
+        {
+          study_id: alertRow.study_id,
+          department_id: department.id,
+          shared_by: auth.userId,
+        },
+        { onConflict: "study_id,department_id" },
+      )
 
-  if (shareError) {
-    return NextResponse.json({ error: shareError.message }, { status: 500 })
+  if (shareResult.error) {
+    return NextResponse.json({ error: shareResult.error.message }, { status: 500 })
   }
 
   const notifiedDepartments = Array.from(new Set([...(alertRow.notified_departments ?? []), department.name]))
@@ -70,19 +79,24 @@ export async function POST(request: Request, context: Context) {
   ])
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://radiant.trymindcore.com"
-  const patientId = alertRow.studies?.patients?.external_id ?? "Unknown"
+  const patientId =
+    alertRow.case_records?.cases?.clients?.client_code ?? alertRow.studies?.patients?.external_id ?? "Unknown"
 
   await Promise.allSettled(
-    (members ?? []).map((member) =>
-      sendHighRiskAlertEmail({
-        to: member.email,
-        patientId,
-        studyUrl: `${appUrl}/`,
-        riskScore: alertRow.risk_score,
-        topFinding: alertRow.title,
-        organizationName: organization?.name ?? "Radiant",
-      }),
-    ),
+    (members ?? []).map(async (member) => {
+      try {
+        await sendHighRiskAlertEmail({
+          to: member.email,
+          patientId,
+          studyUrl: `${appUrl}/`,
+          riskScore: alertRow.risk_score,
+          topFinding: alertRow.title,
+          organizationName: organization?.name ?? "Radiant",
+        })
+      } catch {
+        // Email delivery should not block department sharing.
+      }
+    }),
   )
 
   return NextResponse.json({ notifiedDepartments })

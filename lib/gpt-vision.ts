@@ -24,14 +24,30 @@ export type GptVisionAnalysis = {
   riskLevel: RiskLevel
   findings: GptVisionFinding[]
   summary: string
+  comparison: string
   raw: {
     risk_score: number
     risk_level: "LOW" | "MEDIUM" | "HIGH"
     findings: GptVisionFinding[]
     summary: string
+    comparison: string
   }
   modelId: string
   responseId: string | null
+}
+
+export type GptVisionCaseRecordInput = {
+  images: { label: string; buffer: Buffer; mimeType: string }[]
+  clinicalChecks: Record<string, unknown>
+  recordNotes: string | null
+  clientContext: {
+    clientCode: string
+    age: number
+    previousHospitals: string[]
+    traumaHistory: string | null
+    clientNotes: string | null
+  }
+  priorRecords: { recordNumber: number; date: string; summary: string; riskScore: number; topFindings: string[] }[]
 }
 
 type OpenAiChatCompletion = {
@@ -90,6 +106,27 @@ Rules:
 - Do not hallucinate outside allowed labels
 - Keep output deterministic (temperature = 0.1)
 - This system is an AI-assisted imaging workflow and decision support system, not a medical diagnostic tool.`
+
+const CASE_RECORD_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
+
+For case records, you may receive multiple labeled images from the same clinical visit. Treat the image label as clinical orientation context only; do not invent anatomy that is not visible.
+
+Also use the provided client background, current clinical checks, doctor notes, and prior case record summaries to produce a timeline-aware comparison.
+
+Output JSON schema:
+{
+  "risk_score": number (0-100),
+  "risk_level": "LOW" | "MEDIUM" | "HIGH",
+  "findings": [
+    {
+      "label": one of allowed labels,
+      "zone": one of allowed zones,
+      "confidence": number between 0 and 1
+    }
+  ],
+  "summary": string,
+  "comparison": string describing progression vs prior records, or "No prior record on file."
+}`
 
 const labelSet = new Set<string>(GPT_VISION_FINDING_LABELS)
 const zoneSet = new Set<string>(GPT_VISION_ZONES)
@@ -217,11 +254,17 @@ function normalizeAnalysis(payload: unknown, modelId: string, responseId: string
     throw new GptVisionAnalysisError("findings must contain at least one result.")
   }
 
+  const comparison =
+    typeof payload.comparison === "string" && payload.comparison.trim()
+      ? payload.comparison.trim()
+      : "No prior record on file."
+
   const raw = {
     risk_score: riskScore,
     risk_level: riskLevel.toUpperCase() as "LOW" | "MEDIUM" | "HIGH",
     findings,
     summary: payload.summary.trim(),
+    comparison,
   }
 
   return {
@@ -229,18 +272,26 @@ function normalizeAnalysis(payload: unknown, modelId: string, responseId: string
     riskLevel,
     findings,
     summary: raw.summary,
+    comparison,
     raw,
     modelId,
     responseId,
   }
 }
 
-export async function analyzeChestXrayWithGptVision(image: Buffer, mimeType: string): Promise<GptVisionAnalysis> {
+async function requestVisionAnalysis({
+  systemPrompt,
+  content,
+  maxTokens,
+}: {
+  systemPrompt: string
+  content: unknown[]
+  maxTokens: number
+}): Promise<GptVisionAnalysis> {
   const modelId = getVisionModel()
   const timeoutMs = Number(process.env.OPENAI_VISION_TIMEOUT_MS ?? "60000")
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
-  const dataUrl = `data:${mimeType};base64,${image.toString("base64")}`
 
   let response: Response
   try {
@@ -253,25 +304,13 @@ export async function analyzeChestXrayWithGptVision(image: Buffer, mimeType: str
       body: JSON.stringify({
         model: modelId,
         temperature: 0.1,
-        max_tokens: Number(process.env.OPENAI_VISION_MAX_TOKENS ?? "800"),
+        max_tokens: maxTokens,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Analyze this chest X-ray image and return the required JSON object.",
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: dataUrl,
-                  detail: "high",
-                },
-              },
-            ],
+            content,
           },
         ],
       }),
@@ -282,7 +321,6 @@ export async function analyzeChestXrayWithGptVision(image: Buffer, mimeType: str
     throw new GptVisionAnalysisError("GPT-4o Vision request failed before receiving an HTTP response.", undefined, {
       modelId,
       timeoutMs,
-      mimeType,
       errorName: error instanceof Error ? error.name : "UnknownError",
       errorMessage: error instanceof Error ? error.message : String(error),
     })
@@ -309,10 +347,81 @@ export async function analyzeChestXrayWithGptVision(image: Buffer, mimeType: str
     })
   }
 
-  const content = asTextContent(payload.choices?.[0]?.message?.content)
-  if (!content) {
-    throw new GptVisionAnalysisError("GPT-4o Vision returned an empty response.", undefined, { modelId, responseId: payload.id })
+  const responseContent = asTextContent(payload.choices?.[0]?.message?.content)
+  if (!responseContent) {
+    throw new GptVisionAnalysisError("GPT-4o Vision returned an empty response.", undefined, {
+      modelId,
+      responseId: payload.id,
+    })
   }
 
-  return normalizeAnalysis(parseJsonObject(content), modelId, payload.id ?? null)
+  return normalizeAnalysis(parseJsonObject(responseContent), modelId, payload.id ?? null)
+}
+
+export async function analyzeChestXrayWithGptVision(image: Buffer, mimeType: string): Promise<GptVisionAnalysis> {
+  const dataUrl = `data:${mimeType};base64,${image.toString("base64")}`
+
+  return requestVisionAnalysis({
+    systemPrompt: SYSTEM_PROMPT,
+    maxTokens: Number(process.env.OPENAI_VISION_MAX_TOKENS ?? "800"),
+    content: [
+      {
+        type: "text",
+        text: "Analyze this chest X-ray image and return the required JSON object.",
+      },
+      {
+        type: "image_url",
+        image_url: {
+          url: dataUrl,
+          detail: "high",
+        },
+      },
+    ],
+  })
+}
+
+export async function analyzeCaseRecordWithGptVision(input: GptVisionCaseRecordInput): Promise<GptVisionAnalysis> {
+  if (input.images.length === 0) {
+    throw new GptVisionAnalysisError("At least one record image is required for analysis.")
+  }
+
+  const clinicalContext = {
+    client: input.clientContext,
+    current_record: {
+      notes: input.recordNotes,
+      clinical_checks: input.clinicalChecks,
+    },
+    prior_records: input.priorRecords,
+  }
+
+  const content: unknown[] = [
+    {
+      type: "text",
+      text: `Analyze this case record using the labeled images and structured context below. Return only the required JSON object.\n\n${JSON.stringify(
+        clinicalContext,
+        null,
+        2,
+      )}`,
+    },
+  ]
+
+  for (const image of input.images) {
+    content.push({
+      type: "text",
+      text: `Image label: ${image.label}`,
+    })
+    content.push({
+      type: "image_url",
+      image_url: {
+        url: `data:${image.mimeType};base64,${image.buffer.toString("base64")}`,
+        detail: "high",
+      },
+    })
+  }
+
+  return requestVisionAnalysis({
+    systemPrompt: CASE_RECORD_SYSTEM_PROMPT,
+    maxTokens: Number(process.env.OPENAI_VISION_MAX_TOKENS ?? "1200"),
+    content,
+  })
 }

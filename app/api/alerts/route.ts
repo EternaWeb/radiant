@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { isApiError, requireCompletedProfile } from "@/lib/api-auth"
-import { mapAlerts } from "@/lib/study-mappers"
+import { mapCaseAlerts } from "@/lib/case-mappers"
 
 export async function GET() {
   const auth = await requireCompletedProfile()
@@ -9,7 +9,7 @@ export async function GET() {
   const [{ data: alerts, error: alertsError }, { data: departments, error: departmentsError }] = await Promise.all([
     auth.service
       .from("alerts")
-      .select("*, studies(*, patients(external_id))")
+      .select("*, studies(*, patients(external_id)), case_records(*, cases(*, clients(*)))")
       .eq("organization_id", auth.profile.organization_id!)
       .is("acknowledged_at", null)
       .order("created_at", { ascending: false }),
@@ -24,5 +24,5 @@ export async function GET() {
     return NextResponse.json({ error: alertsError?.message ?? departmentsError?.message }, { status: 500 })
   }
 
-  return NextResponse.json({ alerts: mapAlerts(alerts ?? [], departments ?? []) })
+  return NextResponse.json({ alerts: mapCaseAlerts((alerts ?? []) as any[], departments ?? []) })
 }

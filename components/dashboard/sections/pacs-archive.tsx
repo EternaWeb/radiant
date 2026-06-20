@@ -6,20 +6,22 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
 import { useApp } from "@/lib/app-context"
 import { formatFindingLabel, formatFindingZone } from "@/lib/lung-zones"
-import { useStudies } from "@/lib/use-studies"
+import { useCases } from "@/lib/use-cases"
 
 const filters = ["All", "X-Ray", "MRI", "CT", "Ultrasound"] as const
 
 const statusVariant = { Critical: "danger", Pending: "warning", Reviewed: "success" } as const
 
 export function PacsArchive() {
-  const { openPatient } = useApp()
+  const { openCase } = useApp()
   const [filter, setFilter] = useState<(typeof filters)[number]>("All")
   const [query, setQuery] = useState("")
-  const { studies, loading, error } = useStudies(query)
+  const { cases, loading, error } = useCases(query)
 
-  const rows = studies.filter((p) => {
-    const matchFilter = filter === "All" || p.modality === filter
+  const rows = cases
+    .map((caseView) => ({ caseView, record: caseView.records.at(-1) }))
+    .filter(({ record }) => {
+    const matchFilter = filter === "All" || record?.modality === filter
     return matchFilter
   })
 
@@ -70,26 +72,26 @@ export function PacsArchive() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((p) => (
+                {rows.map(({ caseView, record }) => (
                   <tr
-                    key={p.id}
-                    onClick={() => openPatient(p)}
+                    key={caseView.id}
+                    onClick={() => openCase(caseView, record?.id)}
                     className="cursor-pointer border-t border-border transition-colors hover:bg-muted/40"
                   >
-                    <td className="px-5 py-3.5 font-mono text-xs text-muted-foreground">{p.patientId}</td>
-                    <td className="px-5 py-3.5 font-medium">{p.name}</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{p.date}</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{p.modality}</td>
+                    <td className="px-5 py-3.5 font-mono text-xs text-muted-foreground">{caseView.client.clientCode}</td>
+                    <td className="px-5 py-3.5 font-medium">{caseView.client.name}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{record?.date ?? "No record"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{record?.modality ?? "X-Ray"}</td>
                     <td className="px-5 py-3.5 text-muted-foreground">
-                      {p.findings[0]
-                        ? `${formatFindingLabel(p.findings[0].label)} · ${formatFindingZone(p.findings[0].zone)}`
+                      {record?.findings[0]
+                        ? `${formatFindingLabel(record.findings[0].label)} · ${formatFindingZone(record.findings[0].zone)}`
                         : "Awaiting analysis"}
                     </td>
                     <td className="px-5 py-3.5">
-                      <Badge variant={riskVariant(p.risk)}>{p.risk}%</Badge>
+                      <Badge variant={riskVariant(record?.risk ?? 0)}>{record?.risk ?? 0}%</Badge>
                     </td>
                     <td className="px-5 py-3.5">
-                      <Badge variant={statusVariant[p.status]}>{p.status}</Badge>
+                      <Badge variant={statusVariant[record?.status ?? "Pending"]}>{record?.status ?? "Pending"}</Badge>
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />

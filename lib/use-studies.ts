@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import type { AlertView, StudyView } from "@/lib/studies"
+import type { CaseAlertView } from "@/lib/cases"
+import type { StudyView } from "@/lib/studies"
 
 type StudiesState = {
   studies: StudyView[]
@@ -53,7 +54,7 @@ export function useStudies(query = ""): StudiesState {
 }
 
 export function useAlerts() {
-  const [alerts, setAlerts] = useState<AlertView[]>([])
+  const [alerts, setAlerts] = useState<CaseAlertView[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -63,7 +64,7 @@ export function useAlerts() {
 
     try {
       const response = await fetch("/api/alerts")
-      const payload = (await response.json()) as { alerts?: AlertView[]; error?: string }
+      const payload = (await response.json()) as { alerts?: CaseAlertView[]; error?: string }
 
       if (!response.ok) {
         setError(payload.error ?? "Could not load alerts.")

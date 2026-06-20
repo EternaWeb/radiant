@@ -36,7 +36,7 @@ export type StudyView = {
 
 export type AlertView = {
   id: string
-  studyId: string
+  studyId: string | null
   title: string
   risk: number
   patientId: string

@@ -5,7 +5,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
 import { useApp } from "@/lib/app-context"
 import { findingsToHeatmapBoxes } from "@/lib/lung-zones"
-import { useAlerts, useStudies } from "@/lib/use-studies"
+import { useCases } from "@/lib/use-cases"
+import { useAlerts } from "@/lib/use-studies"
 import { HeatmapViewer } from "../heatmap-viewer"
 
 const accentMap = {
@@ -23,16 +24,17 @@ type Kpi = {
 }
 
 export function DashboardHome() {
-  const { hospital, openPatient, setSection, profile } = useApp()
-  const { studies, loading } = useStudies()
+  const { hospital, openCase, setSection, profile } = useApp()
+  const { cases, loading } = useCases()
   const { alerts } = useAlerts()
-  const recent = studies.slice(0, 4)
-  const showcase = studies.find((p) => p.risk >= 70) ?? studies[0] ?? null
-  const showcaseBoxes = showcase ? findingsToHeatmapBoxes(showcase.findings) : []
-  const completed = studies.filter((study) => study.rawStatus === "analyzed" || study.rawStatus === "critical")
-  const highRiskCount = studies.filter((study) => study.risk >= 70).length
+  const recent = cases.slice(0, 4)
+  const records = cases.flatMap((caseView) => caseView.records.map((record) => ({ caseView, record })))
+  const showcase = records.find((item) => item.record.risk >= 70) ?? records[0] ?? null
+  const showcaseBoxes = showcase ? findingsToHeatmapBoxes(showcase.record.findings) : []
+  const completed = records.filter((item) => item.record.rawStatus === "analyzed" || item.record.rawStatus === "critical")
+  const highRiskCount = records.filter((item) => item.record.risk >= 70).length
   const kpis: Kpi[] = [
-    { label: "Images Processed Today", value: String(studies.length), delta: loading ? "Loading" : "Live", trend: "flat", accent: "primary" },
+    { label: "Images Processed Today", value: String(records.length), delta: loading ? "Loading" : "Live", trend: "flat", accent: "primary" },
     { label: "High Risk Cases", value: String(highRiskCount), delta: `${alerts.length} active`, trend: "up", accent: "danger" },
     { label: "Analyzed Studies", value: String(completed.length), delta: "Archived", trend: "flat", accent: "success" },
     { label: "Departments Connected", value: hospital.department ? "1+" : "0", delta: "Workspace", trend: "flat", accent: "primary" },
@@ -98,24 +100,27 @@ export function DashboardHome() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recent.map((p) => (
+                  {recent.map((caseView) => {
+                    const latest = caseView.records.at(-1)
+                    return (
                     <tr
-                      key={p.id}
-                      onClick={() => openPatient(p)}
+                      key={caseView.id}
+                      onClick={() => openCase(caseView)}
                       className="cursor-pointer border-t border-border transition-colors hover:bg-muted/40"
                     >
-                      <td className="px-4 py-3 font-medium">{p.name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{p.modality}</td>
-                      <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">{p.bodyPart}</td>
+                      <td className="px-4 py-3 font-medium">{caseView.client.name}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{latest?.modality ?? "X-Ray"}</td>
+                      <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">{caseView.title}</td>
                       <td className="px-4 py-3 text-right">
-                        <Badge variant={riskVariant(p.risk)}>{p.risk}%</Badge>
+                        <Badge variant={riskVariant(latest?.risk ?? 0)}>{latest?.risk ?? 0}%</Badge>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                   {recent.length === 0 && (
                     <tr>
                       <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                        {loading ? "Loading studies..." : "No studies archived yet."}
+                        {loading ? "Loading cases..." : "No cases archived yet."}
                       </td>
                     </tr>
                   )}
@@ -129,15 +134,15 @@ export function DashboardHome() {
           <CardContent className="p-5">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="font-semibold">AI Heatmap Viewer</h3>
-              <Badge variant={showcase ? riskVariant(showcase.risk) : "muted"}>
-                <Activity className="h-3 w-3" /> {showcase ? `${showcase.risk}% risk` : "No study"}
+              <Badge variant={showcase ? riskVariant(showcase.record.risk) : "muted"}>
+                <Activity className="h-3 w-3" /> {showcase ? `${showcase.record.risk}% risk` : "No record"}
               </Badge>
             </div>
             {showcase ? (
               <>
-                <HeatmapViewer image={showcase.image} heatmapImage={showcase.heatmapImage} boxes={showcaseBoxes} />
+                <HeatmapViewer image={showcase.record.image} heatmapImage={showcase.record.heatmapImage} boxes={showcaseBoxes} />
                 <button
-                  onClick={() => openPatient(showcase)}
+                  onClick={() => openCase(showcase.caseView, showcase.record.id)}
                   className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background py-2.5 text-sm font-medium transition-colors hover:bg-muted"
                 >
                   Open full analysis <ArrowRight className="h-4 w-4" />

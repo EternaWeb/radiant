@@ -76,16 +76,16 @@ export async function sendHighRiskAlertEmail({
   return getResend().emails.send({
     from,
     to,
-    subject: `High-risk Radiant study for ${patientId}`,
-    text: `${organizationName} has a high-risk Radiant study for patient ${patientId}. Risk score: ${riskScore}%. Top finding: ${topFinding}. Review it here: ${studyUrl}`,
+    subject: `High-risk Radiant record for ${patientId}`,
+    text: `${organizationName} has a high-risk Radiant case record for client ${patientId}. Risk score: ${riskScore}%. Top finding: ${topFinding}. Review it here: ${studyUrl}`,
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
-        <h1 style="font-size: 22px;">High-risk Radiant study</h1>
-        <p><strong>${organizationName}</strong> has a high-risk imaging study ready for review.</p>
-        <p><strong>Patient:</strong> ${patientId}<br /><strong>Risk score:</strong> ${riskScore}%<br /><strong>Top finding:</strong> ${topFinding}</p>
+        <h1 style="font-size: 22px;">High-risk Radiant record</h1>
+        <p><strong>${organizationName}</strong> has a high-risk imaging case record ready for review.</p>
+        <p><strong>Client:</strong> ${patientId}<br /><strong>Risk score:</strong> ${riskScore}%<br /><strong>Top finding:</strong> ${topFinding}</p>
         <p>
           <a href="${studyUrl}" style="display: inline-block; background: #dc2626; color: #ffffff; padding: 10px 16px; border-radius: 8px; text-decoration: none;">
-            Review study
+            Review record
           </a>
         </p>
         <p style="font-size: 12px; color: #6b7280;">AI-assisted output is not a clinical diagnosis. Radiologist review is required.</p>

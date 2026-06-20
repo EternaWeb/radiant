@@ -42,7 +42,7 @@ export function AlertsCenter() {
             <span className="absolute inline-flex h-full w-full rounded-full bg-success opacity-75 [animation:pulse-ring_2s_ease-out_infinite]" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
           </span>
-          Auto-refreshing high-risk studies
+          Auto-refreshing high-risk records
         </span>
       </div>
       {error && <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
@@ -69,7 +69,8 @@ export function AlertsCenter() {
                   </div>
                   <h3 className="mt-2 text-lg font-bold">{alert.title}</h3>
                   <p className="text-sm text-muted-foreground">
-                    Patient {alert.patientId} · {alert.modality}
+                    Client {alert.patientId} · {alert.clientName} · {alert.caseTitle}
+                    {alert.recordNumber ? ` · Record #${alert.recordNumber}` : ""} · {alert.modality}
                   </p>
 
                   <div className="mt-4">
