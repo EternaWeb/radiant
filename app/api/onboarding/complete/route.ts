@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
+import { DEFAULT_DEPARTMENTS, iconForDepartmentName } from "@/lib/departments"
+import { getAuthAvatarUrl } from "@/lib/avatars"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
-import type { ClinicalRole } from "@/lib/supabase/types"
+import type { ClinicalRole, DepartmentRecord } from "@/lib/supabase/types"
 
 const clinicalRoles: ClinicalRole[] = ["radiologist", "emergency_doctor", "department_doctor", "administrator"]
 
@@ -9,6 +11,28 @@ type Payload = {
   clinicalRole?: ClinicalRole
   hospitalName?: string
   departmentName?: string
+}
+
+function buildDepartmentRows(organizationId: string, homeDepartmentName: string) {
+  const normalizedHome = homeDepartmentName.trim()
+  const rows = DEFAULT_DEPARTMENTS.map((dept) => ({
+    organization_id: organizationId,
+    name: dept.name,
+    icon: dept.icon,
+    location: dept.location,
+  }))
+
+  const hasHome = rows.some((dept) => dept.name.toLowerCase() === normalizedHome.toLowerCase())
+  if (normalizedHome && !hasHome) {
+    rows.push({
+      organization_id: organizationId,
+      name: normalizedHome,
+      icon: iconForDepartmentName(normalizedHome),
+      location: "Main campus",
+    })
+  }
+
+  return rows
 }
 
 export async function POST(request: Request) {
@@ -32,6 +56,7 @@ export async function POST(request: Request) {
   }
 
   const service = createServiceClient()
+  const avatarUrl = getAuthAvatarUrl(user.user_metadata)
 
   const { data: existingProfile } = await service
     .from("profiles")
@@ -84,20 +109,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: organizationError?.message ?? "Could not create workspace." }, { status: 500 })
   }
 
-  const { data: department, error: departmentError } = await service
+  const departmentRows = buildDepartmentRows(organization.id, departmentName)
+  const { data: createdDepartments, error: departmentsError } = await service
     .from("departments")
-    .insert({
-      organization_id: organization.id,
-      name: departmentName,
-      icon: "scan",
-      location: "Main campus",
-    })
+    .insert(departmentRows)
     .select("*")
-    .single()
 
-  if (departmentError || !department) {
-    return NextResponse.json({ error: departmentError?.message ?? "Could not create department." }, { status: 500 })
+  if (departmentsError || !createdDepartments?.length) {
+    return NextResponse.json({ error: departmentsError?.message ?? "Could not create departments." }, { status: 500 })
   }
+
+  const department =
+    (createdDepartments as DepartmentRecord[]).find(
+      (dept) => dept.name.toLowerCase() === departmentName.toLowerCase(),
+    ) ?? createdDepartments[0]
 
   const { data: profile, error: profileError } = await service
     .from("profiles")
@@ -106,6 +131,7 @@ export async function POST(request: Request) {
       full_name: fullName,
       email,
       phone: null,
+      avatar_url: avatarUrl,
       clinical_role: clinicalRole,
       workspace_role: "admin",
       is_admin: true,

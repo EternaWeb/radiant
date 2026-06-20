@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server"
 type Payload = {
   fullName?: string
   phone?: string
+  avatarUrl?: string | null
 }
 
 export async function PATCH(request: Request) {
@@ -31,9 +32,14 @@ export async function PATCH(request: Request) {
     updates.phone = body.phone.trim() || ""
   }
 
-  const dbUpdates: { full_name?: string; phone?: string | null } = {}
+  if (body.avatarUrl === null || typeof body.avatarUrl === "string") {
+    updates.avatarUrl = body.avatarUrl
+  }
+
+  const dbUpdates: { full_name?: string; phone?: string | null; avatar_url?: string | null } = {}
   if (updates.fullName !== undefined) dbUpdates.full_name = updates.fullName
   if (updates.phone !== undefined) dbUpdates.phone = updates.phone || null
+  if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatarUrl
 
   if (Object.keys(dbUpdates).length === 0) {
     return NextResponse.json({ error: "No profile updates were provided." }, { status: 400 })

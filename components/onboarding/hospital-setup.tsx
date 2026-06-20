@@ -108,7 +108,7 @@ export function HospitalSetup() {
             placeholder="e.g. St. Vincent Medical Center"
           />
           <Field
-            label="Department"
+            label="Your department"
             value={department}
             onChange={invite ? () => undefined : setDepartment}
             placeholder="e.g. Radiology"

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getAuthAvatarUrl } from "@/lib/avatars"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
 import type { ClinicalRole } from "@/lib/supabase/types"
 
@@ -61,6 +62,7 @@ export async function POST(request: Request, context: Context) {
         organizations: {
           id: string
           name: string
+          logo_url: string | null
           created_by: string
           created_at: string
           updated_at: string
@@ -89,6 +91,7 @@ export async function POST(request: Request, context: Context) {
   }
 
   const service = createServiceClient()
+  const avatarUrl = getAuthAvatarUrl(user.user_metadata)
   const { data: existingProfile } = await service.from("profiles").select("*").eq("id", user.id).maybeSingle()
 
   if (
@@ -106,6 +109,7 @@ export async function POST(request: Request, context: Context) {
       full_name: fullName,
       email: user.email ?? invite.email,
       phone: existingProfile?.phone ?? null,
+      avatar_url: existingProfile?.avatar_url ?? avatarUrl,
       clinical_role: invite.clinical_role,
       workspace_role: "participant",
       is_admin: false,

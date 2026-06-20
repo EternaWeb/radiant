@@ -14,6 +14,8 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { RadiantLogo } from "@/components/radiant-logo"
+import { OrgLogo } from "@/components/org-logo"
+import { UserAvatar } from "@/components/user-avatar"
 import { useApp, type Section } from "@/lib/app-context"
 import { formatClinicalRole } from "@/lib/roles"
 import { useAlerts } from "@/lib/use-studies"
@@ -49,7 +51,7 @@ const titles: Record<Section, string> = {
 }
 
 export function Shell() {
-  const { section, setSection, profile } = useApp()
+  const { section, setSection, profile, organization } = useApp()
   const { alerts } = useAlerts()
   const displayName = profile?.full_name ?? "Radiant user"
   const displayRole = formatClinicalRole(profile?.clinical_role)
@@ -58,8 +60,13 @@ export function Shell() {
     <div className="flex min-h-svh bg-background">
       {/* Sidebar */}
       <aside className="sticky top-0 flex h-svh w-16 flex-col items-center bg-sidebar py-4 lg:w-60 lg:items-stretch lg:px-3">
-        <div className="mb-6 flex items-center justify-center lg:justify-start lg:px-2">
-          <RadiantLogo className="h-auto w-10 rounded-md lg:h-8 lg:w-auto" />
+        <div className="mb-6 flex items-center justify-center gap-2 lg:justify-start lg:px-2">
+          {organization?.logo_url ? (
+            <OrgLogo name={organization.name} src={organization.logo_url} size="sm" className="hidden lg:block" />
+          ) : (
+            <RadiantLogo className="hidden h-auto w-10 rounded-md lg:block lg:h-8 lg:w-auto" />
+          )}
+          <RadiantLogo className="h-auto w-10 rounded-md lg:hidden" />
         </div>
 
         <nav className="flex flex-1 flex-col gap-1">
@@ -90,11 +97,7 @@ export function Shell() {
         </nav>
 
         <div className="mt-4 hidden items-center gap-2 rounded-lg bg-sidebar-accent p-2 lg:flex">
-          <img
-            src="/avatar-doctor.png"
-            alt={displayName}
-            className="h-8 w-8 rounded-full object-cover"
-          />
+          <UserAvatar name={displayName} src={profile?.avatar_url} size="sm" />
           <div className="min-w-0">
             <p className="truncate text-xs font-semibold">{displayName}</p>
             <p className="truncate text-[11px] text-muted-foreground">{displayRole}</p>
@@ -117,7 +120,7 @@ export function Shell() {
             <Bell className="h-4 w-4" />
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive" />
           </button>
-          <img src="/avatar-doctor.png" alt={displayName} className="h-9 w-9 rounded-full object-cover" />
+          <UserAvatar name={displayName} src={profile?.avatar_url} size="sm" />
         </header>
 
         <main className="flex-1 px-4 pb-4 pt-3 md:px-5 md:pb-5 md:pt-4">

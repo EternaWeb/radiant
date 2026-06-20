@@ -1,5 +1,6 @@
 import { AppProvider } from "@/lib/app-context"
 import { AppRouter } from "@/components/app-router"
+import { getAuthAvatarUrl } from "@/lib/avatars"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
 import type { PendingInvite } from "@/lib/app-context"
 import type { DepartmentRecord, Invite, Organization, Profile } from "@/lib/supabase/types"
@@ -20,6 +21,18 @@ export default async function Page() {
   if (user) {
     const { data: profileData } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle()
     profile = profileData
+
+    const googleAvatar = getAuthAvatarUrl(user.user_metadata)
+    if (profile && !profile.avatar_url && googleAvatar) {
+      const service = createServiceClient()
+      const { data: syncedProfile } = await service
+        .from("profiles")
+        .update({ avatar_url: googleAvatar })
+        .eq("id", user.id)
+        .select("*")
+        .single()
+      if (syncedProfile) profile = syncedProfile
+    }
 
     if (profile?.organization_id) {
       const { data } = await supabase.from("organizations").select("*").eq("id", profile.organization_id).maybeSingle()
@@ -80,10 +93,11 @@ export default async function Page() {
       : typeof user?.user_metadata?.name === "string"
         ? user.user_metadata.name
         : null
+  const avatarUrl = user ? getAuthAvatarUrl(user.user_metadata) : null
 
   return (
     <AppProvider
-      initialUser={user ? { id: user.id, email: user.email ?? null, fullName } : null}
+      initialUser={user ? { id: user.id, email: user.email ?? null, fullName, avatarUrl } : null}
       initialProfile={profile}
       initialOrganization={organization}
       initialDepartment={department}

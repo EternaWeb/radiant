@@ -12,6 +12,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type Organization = {
   id: string
   name: string
+  logo_url: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -32,6 +33,7 @@ export type Profile = {
   full_name: string
   email: string
   phone: string | null
+  avatar_url: string | null
   clinical_role: ClinicalRole
   workspace_role: WorkspaceRole
   is_admin: boolean

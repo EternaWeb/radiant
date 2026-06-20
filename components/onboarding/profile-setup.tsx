@@ -1,21 +1,27 @@
 "use client"
 
-import { ArrowRight, UserRound } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { UserAvatar } from "@/components/user-avatar"
 import { useApp } from "@/lib/app-context"
 import { Stepper } from "./role-select"
 
 export function ProfileSetup() {
-  const { fullName, setFullName, setStage, user, invite } = useApp()
+  const { fullName, setFullName, setStage, user, profile, invite } = useApp()
   const name = fullName.trim()
+  const avatarUrl = profile?.avatar_url ?? user?.avatarUrl ?? null
 
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-3xl flex-col justify-center px-6 py-12">
       <Stepper step={1} />
-      <div className="mt-8 flex h-12 w-12 items-center justify-center rounded-xl bg-accent-blue/15 text-accent-blue">
-        <UserRound className="h-6 w-6" />
+      <div className="mt-8 flex items-center gap-4">
+        <UserAvatar name={name || user?.fullName || "You"} src={avatarUrl} size="xl" />
+        <div>
+          <p className="text-sm text-muted-foreground">Profile photo</p>
+          <p className="text-xs text-muted-foreground">Imported from Google when available. Change it later in Settings.</p>
+        </div>
       </div>
-      <h1 className="mt-5 text-balance text-3xl font-bold tracking-tight md:text-4xl">Complete your profile</h1>
+      <h1 className="mt-6 text-balance text-3xl font-bold tracking-tight md:text-4xl">Complete your profile</h1>
       <p className="mt-2 text-muted-foreground">
         Enter your full name so your workspace and department directory show the right identity.
       </p>

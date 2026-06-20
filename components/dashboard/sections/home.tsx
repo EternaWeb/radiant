@@ -3,6 +3,8 @@
 import { TrendingUp, TrendingDown, Minus, ArrowRight, Activity } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
+import { UserAvatar } from "@/components/user-avatar"
+import { OrgLogo } from "@/components/org-logo"
 import { useApp } from "@/lib/app-context"
 import { findingsToHeatmapBoxes } from "@/lib/lung-zones"
 import { useCases } from "@/lib/use-cases"
@@ -24,7 +26,7 @@ type Kpi = {
 }
 
 export function DashboardHome() {
-  const { hospital, openCase, setSection, profile } = useApp()
+  const { hospital, openCase, setSection, profile, organization } = useApp()
   const { cases, loading } = useCases()
   const { alerts } = useAlerts()
   const recent = cases.slice(0, 4)
@@ -42,12 +44,16 @@ export function DashboardHome() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <p className="text-sm text-muted-foreground">Good morning</p>
-        <h2 className="text-2xl font-bold tracking-tight">{profile?.full_name ?? "Radiant clinician"}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {hospital.name} · {hospital.department}
-        </p>
+      <div className="flex flex-wrap items-center gap-4">
+        <UserAvatar name={profile?.full_name ?? "Radiant clinician"} src={profile?.avatar_url} size="lg" />
+        <div>
+          <p className="text-sm text-muted-foreground">Good morning</p>
+          <h2 className="text-2xl font-bold tracking-tight">{profile?.full_name ?? "Radiant clinician"}</h2>
+          <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+            <OrgLogo name={hospital.name} src={organization?.logo_url} size="sm" />
+            {hospital.name} · {hospital.department}
+          </p>
+        </div>
       </div>
 
       {/* KPI cards */}

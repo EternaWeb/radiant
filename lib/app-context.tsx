@@ -19,6 +19,7 @@ export type AuthUser = {
   id: string
   email: string | null
   fullName: string | null
+  avatarUrl: string | null
 }
 
 export type PendingInvite = {

@@ -10,20 +10,23 @@ import {
   ArrowLeft,
   Mail,
   Phone,
-  Clock,
   UserPlus,
   Trash2,
   X,
   Send,
   Check,
   Shield,
-  Building2,
   Crown,
+  Plus,
+  MapPin,
   type LucideIcon,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { OrgLogo } from "@/components/org-logo"
+import { UserAvatar } from "@/components/user-avatar"
 import { departmentRoles } from "@/lib/data"
+import { DEPARTMENT_ICONS } from "@/lib/departments"
 import { parseClinicalRole } from "@/lib/roles"
 import { useApp } from "@/lib/app-context"
 
@@ -32,6 +35,7 @@ type StaffStatus = "Online" | "On call" | "Off duty"
 type DirectoryMember = {
   id: string
   name: string
+  avatarUrl: string | null
   role: string
   email: string
   phone: string
@@ -59,6 +63,7 @@ type DepartmentsResponse = {
   organization?: {
     id: string
     name: string
+    logoUrl?: string | null
   }
   departments?: DirectoryDepartment[]
   error?: string
@@ -81,9 +86,11 @@ export function Departments() {
   const { isAdmin } = useApp()
   const [departments, setDepartments] = useState<DirectoryDepartment[]>([])
   const [organizationName, setOrganizationName] = useState("Hospital organization")
+  const [organizationLogoUrl, setOrganizationLogoUrl] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
 
   async function loadDepartments() {
     setLoading(true)
@@ -98,6 +105,7 @@ export function Departments() {
     }
 
     setOrganizationName(result.organization?.name ?? "Hospital organization")
+    setOrganizationLogoUrl(result.organization?.logoUrl ?? null)
     setDepartments(result.departments ?? [])
   }
 
@@ -155,29 +163,41 @@ export function Departments() {
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent-blue/15 text-accent-blue">
-              <Building2 className="h-6 w-6" />
-            </div>
+            <OrgLogo name={organizationName} src={organizationLogoUrl} size="lg" />
             <div>
-              <p className="text-sm text-muted-foreground">Department</p>
+              <p className="text-sm text-muted-foreground">Hospital organization</p>
               <h2 className="text-2xl font-bold tracking-tight">{organizationName}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Department cards are shown below. Select one to open its people cards.
+                Each card is a department. Open one to see the people assigned there.
               </p>
             </div>
           </div>
-          <Badge variant="muted">
-            <Users className="h-3 w-3" /> {departments.length} active departments
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="muted">
+              <Users className="h-3 w-3" /> {departments.length} departments
+            </Badge>
+            {isAdmin && (
+              <button
+                onClick={() => setCreateOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-accent-blue px-3 py-2 text-sm font-medium text-accent-blue-foreground transition-colors hover:bg-accent-blue/90"
+              >
+                <Plus className="h-4 w-4" /> Add department
+              </button>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      {loading && <p className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Loading departments...</p>}
-      {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">{error}</p>}
+      {loading && (
+        <p className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Loading departments...</p>
+      )}
+      {error && (
+        <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">{error}</p>
+      )}
 
       {!loading && !error && departments.length === 0 && (
         <p className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-          No departments with accepted members yet. Empty departments are hidden until someone joins them.
+          No departments yet. {isAdmin ? "Create one to start inviting staff." : "Ask an admin to set up departments."}
         </p>
       )}
 
@@ -185,31 +205,61 @@ export function Departments() {
         {departments.map((department) => {
           const Icon = icons[department.icon] ?? ScanLine
           const online = department.staff.filter((staff) => staff.status === "Online").length
+          const preview = department.staff.slice(0, 4)
           return (
             <button
               key={department.id}
               onClick={() => setActiveId(department.id)}
               className="group rounded-xl border border-border bg-card p-5 text-left transition-all hover:border-accent-blue/50 hover:bg-muted/40 hover:shadow-lg hover:shadow-accent-blue/5"
             >
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-muted text-accent-blue transition-colors group-hover:bg-accent-blue group-hover:text-accent-blue-foreground">
                   <Icon className="h-5 w-5" />
                 </div>
-                <Badge variant="muted">
+                <Badge variant={department.memberCount > 0 ? "muted" : "warning"}>
                   <Users className="h-3 w-3" /> {department.memberCount}
                 </Badge>
               </div>
               <p className="mt-4 text-lg font-semibold">{department.name}</p>
-              <p className="text-xs text-muted-foreground">{department.hospital}</p>
-              <p className="mt-3 text-xs text-muted-foreground">{department.location}</p>
-              <div className="mt-3 inline-flex items-center gap-1.5 text-xs text-success">
-                <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                {online} online now · {department.memberCount} people
+              <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <MapPin className="h-3 w-3" /> {department.location}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Lead: {department.lead}</p>
+
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <div className="flex -space-x-2">
+                  {preview.length > 0 ? (
+                    preview.map((staff) => (
+                      <UserAvatar
+                        key={staff.id}
+                        name={staff.name}
+                        src={staff.avatarUrl}
+                        size="sm"
+                        className="ring-2 ring-card"
+                      />
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">No members yet</span>
+                  )}
+                </div>
+                <span className="text-xs text-success">
+                  {department.memberCount > 0 ? `${online} online` : "Empty"}
+                </span>
               </div>
             </button>
           )
         })}
       </div>
+
+      {createOpen && (
+        <CreateDepartmentModal
+          onClose={() => setCreateOpen(false)}
+          onCreated={async () => {
+            setCreateOpen(false)
+            await loadDepartments()
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -253,10 +303,10 @@ function DepartmentDetail({
               <Icon className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Department details</p>
+              <p className="text-sm text-muted-foreground">{department.hospital}</p>
               <h2 className="text-xl font-bold tracking-tight">{department.name}</h2>
               <p className="text-sm text-muted-foreground">
-                {department.hospital} · {department.location}
+                {department.location} · Lead: {department.lead}
               </p>
             </div>
           </div>
@@ -265,7 +315,7 @@ function DepartmentDetail({
               onClick={() => setModalOpen(true)}
               className="inline-flex items-center gap-1.5 rounded-lg bg-accent-blue px-4 py-2.5 text-sm font-medium text-accent-blue-foreground transition-colors hover:bg-accent-blue/90"
             >
-              <UserPlus className="h-4 w-4" /> Add member
+              <UserPlus className="h-4 w-4" /> Invite member
             </button>
           )}
         </CardContent>
@@ -275,33 +325,41 @@ function DepartmentDetail({
         <CardContent className="p-5">
           <div className="mb-4 flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
-            <h3 className="font-semibold">People in {department.name}</h3>
+            <h3 className="font-semibold">Team members</h3>
             <Badge variant="muted">{department.memberCount}</Badge>
           </div>
 
           {department.staff.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No accepted members in this department yet. Admins can send invites to add users.
-            </p>
+            <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Users className="h-6 w-6" />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                No one is assigned to {department.name} yet.
+                {isAdmin ? " Send an invite to add staff." : ""}
+              </p>
+              {isAdmin && (
+                <button
+                  onClick={() => setModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
+                >
+                  <UserPlus className="h-4 w-4" /> Invite first member
+                </button>
+              )}
+            </div>
           ) : (
-            <div className="flex flex-col gap-5">
-              {groupedEntries.map(([role, staffMembers]) => (
-                <div key={role} className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold">{role}</h4>
-                    <Badge variant="muted">{staffMembers.length}</Badge>
-                  </div>
-                  {staffMembers.map((staff) => (
-                    <MemberCard
-                      key={staff.id}
-                      staff={staff}
-                      isAdmin={isAdmin}
-                      onKick={onKick}
-                      onGrantAdmin={onGrantAdmin}
-                    />
-                  ))}
-                </div>
-              ))}
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {groupedEntries.flatMap(([, staffMembers]) =>
+                staffMembers.map((staff) => (
+                  <MemberCard
+                    key={staff.id}
+                    staff={staff}
+                    isAdmin={isAdmin}
+                    onKick={onKick}
+                    onGrantAdmin={onGrantAdmin}
+                  />
+                )),
+              )}
             </div>
           )}
         </CardContent>
@@ -341,77 +399,176 @@ function MemberCard({
   }
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-border bg-background p-4 transition-colors hover:bg-muted/40">
-      <div className="min-w-48 flex-1">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">
-            {staff.name
-              .split(" ")
-              .map((name) => name[0])
-              .slice(0, 2)
-              .join("")}
+    <div className="flex h-full flex-col rounded-2xl border border-border bg-background p-4 shadow-sm transition-all hover:border-accent-blue/30 hover:shadow-md">
+      <div className="flex items-start gap-3">
+        <UserAvatar name={staff.name} src={staff.avatarUrl} size="lg" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="truncate font-semibold">{staff.name}</p>
+            {staff.isAdmin && (
+              <Badge variant="default" className="gap-1">
+                <Shield className="h-3 w-3" /> Admin
+              </Badge>
+            )}
           </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="font-medium">{staff.name}</p>
-              <Badge variant={statusTone[staff.status]}>{staff.status}</Badge>
-              {staff.isAdmin && (
-                <Badge variant="default">
-                  <Shield className="h-3 w-3" /> Admin
-                </Badge>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">{staff.role}</p>
-          </div>
+          <p className="text-sm text-muted-foreground">{staff.role}</p>
+          <Badge variant={statusTone[staff.status]} className="mt-2">
+            {staff.status}
+          </Badge>
         </div>
-
-        <dl className="mt-4 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-          <Info label="User ID" value={staff.id} />
-          <Info label="Email" value={staff.email} icon={Mail} />
-          <Info label="Phone" value={staff.phone} icon={Phone} />
-          <Info label="Workspace role" value={staff.workspaceRole} icon={Clock} />
-          <Info label="Department" value={staff.department} />
-          <Info label="Hospital" value={staff.hospital} />
-          <Info label="Is admin" value={staff.isAdmin ? "Yes" : "No"} />
-        </dl>
       </div>
 
-      {isAdmin && !staff.isAdmin && (
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={handleGrantAdmin}
-            disabled={granting}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-accent-blue hover:bg-accent-blue/10 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Crown className="h-3.5 w-3.5" /> {granting ? "Granting..." : "Grant Administrator"}
-          </button>
-          <button
-            onClick={() => onKick(staff.id)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-destructive transition-colors hover:border-destructive hover:bg-destructive/10"
-          >
-            <Trash2 className="h-3.5 w-3.5" /> Remove
-          </button>
+      <div className="mt-4 flex flex-col gap-2">
+        <a
+          href={`mailto:${staff.email}`}
+          className="inline-flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-xs text-foreground transition-colors hover:bg-muted"
+        >
+          <Mail className="h-3.5 w-3.5 text-accent-blue" />
+          <span className="truncate">{staff.email}</span>
+        </a>
+        <div className="inline-flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-xs text-foreground">
+          <Phone className="h-3.5 w-3.5 text-accent-blue" />
+          <span>{staff.phone}</span>
         </div>
-      )}
+      </div>
+
+      <div className="mt-auto flex flex-wrap gap-2 pt-4">
+        {isAdmin && !staff.isAdmin && (
+          <>
+            <button
+              onClick={handleGrantAdmin}
+              disabled={granting}
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium transition-colors hover:border-accent-blue hover:bg-accent-blue/10 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Crown className="h-3.5 w-3.5" /> {granting ? "Granting..." : "Make admin"}
+            </button>
+            <button
+              onClick={() => onKick(staff.id)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-destructive transition-colors hover:border-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </>
+        )}
+      </div>
     </div>
   )
 }
 
-function Info({
-  label,
-  value,
-  icon: Icon,
+function CreateDepartmentModal({
+  onClose,
+  onCreated,
 }: {
-  label: string
-  value: string
-  icon?: LucideIcon
+  onClose: () => void
+  onCreated: () => void
 }) {
+  const [name, setName] = useState("")
+  const [icon, setIcon] = useState<string>("scan")
+  const [location, setLocation] = useState("Main campus")
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleCreate() {
+    if (name.trim().length < 2) return
+    setSaving(true)
+    setError(null)
+    const response = await fetch("/api/departments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, icon, location }),
+    })
+    const result = await response.json()
+    setSaving(false)
+
+    if (!response.ok) {
+      setError(result.error ?? "Could not create department.")
+      return
+    }
+
+    onCreated()
+  }
+
   return (
-    <div>
-      <dt className="inline-flex items-center gap-1.5">
-        {Icon && <Icon className="h-3.5 w-3.5" />} {label}
-      </dt>
-      <dd className="mt-0.5 break-all font-medium text-foreground">{value}</dd>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} aria-hidden />
+      <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">Create department</h3>
+            <p className="text-sm text-muted-foreground">Add a department card your staff can be invited into.</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="mt-5 flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium">Department name</span>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="e.g. Emergency"
+              className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-accent-blue"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium">Location</span>
+            <input
+              value={location}
+              onChange={(event) => setLocation(event.target.value)}
+              placeholder="Main campus"
+              className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-accent-blue"
+            />
+          </label>
+
+          <div>
+            <span className="mb-2 block text-sm font-medium">Icon</span>
+            <div className="grid grid-cols-4 gap-2">
+              {DEPARTMENT_ICONS.map((candidate) => {
+                const Icon = icons[candidate] ?? ScanLine
+                return (
+                  <button
+                    key={candidate}
+                    type="button"
+                    onClick={() => setIcon(candidate)}
+                    className={`flex h-11 items-center justify-center rounded-lg border transition-colors ${
+                      icon === candidate
+                        ? "border-accent-blue bg-accent-blue/10 text-accent-blue"
+                        : "border-border text-muted-foreground hover:border-accent-blue/50"
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              onClick={onClose}
+              className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={name.trim().length < 2 || saving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent-blue px-4 py-2.5 text-sm font-medium text-accent-blue-foreground transition-colors hover:bg-accent-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? "Creating..." : "Create department"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -468,7 +625,7 @@ function InviteModal({
         <div className="flex items-start justify-between">
           <div>
             <h3 className="text-lg font-semibold">Invite to {department.name}</h3>
-            <p className="text-sm text-muted-foreground">A secure invite email will be sent with a login link.</p>
+            <p className="text-sm text-muted-foreground">They will join this department after accepting the invite.</p>
           </div>
           <button
             onClick={onClose}
