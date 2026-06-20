@@ -62,6 +62,16 @@ RESEND_FROM_EMAIL=Radiant <invites@radiant.trymindcore.com>
 
 Redeploy after saving the variables.
 
+### Troubleshooting `MIDDLEWARE_INVOCATION_FAILED`
+
+If the site returns **500** with `MIDDLEWARE_INVOCATION_FAILED`, check these first:
+
+1. **Supabase env vars are set in Vercel Production** — not just Preview. Values must be non-empty:
+   - `NEXT_PUBLIC_SUPABASE_URL` (e.g. `https://xxxxx.supabase.co`)
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+2. **Redeploy after changing env vars** — Vercel does not inject new variables into an existing deployment until you redeploy.
+3. In the Vercel deployment **Functions** log, look for `Cannot find module '@swc/helpers/esm/...'`. If you see that, pull the latest code (it includes an `outputFileTracingIncludes` workaround for Next.js 16.2.x) and redeploy.
+
 ## 5. Smoke Test
 
 1. Visit `https://radiant.trymindcore.com`.
