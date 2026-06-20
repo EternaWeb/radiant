@@ -14,9 +14,6 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  outputFileTracingIncludes: {
-    "*": ["./node_modules/@swc/helpers/**/*"],
-  },
 }
 
 export default nextConfig

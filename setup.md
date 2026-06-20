@@ -70,7 +70,7 @@ If the site returns **500** with `MIDDLEWARE_INVOCATION_FAILED`, check these fir
    - `NEXT_PUBLIC_SUPABASE_URL` (e.g. `https://xxxxx.supabase.co`)
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 2. **Redeploy after changing env vars** — Vercel does not inject new variables into an existing deployment until you redeploy.
-3. In the Vercel deployment **Functions** log, look for `Cannot find module '@swc/helpers/esm/...'`. If you see that, pull the latest code (it includes an `outputFileTracingIncludes` workaround for Next.js 16.2.x) and redeploy.
+3. In the Vercel deployment **Functions** log, look for `Cannot find module '@swc/helpers/esm/...'`. If you see that, ensure the project uses a hoisted `node_modules` layout (`.npmrc` with `node-linker=hoisted`) and redeploy.
 
 ## 5. Smoke Test
 
