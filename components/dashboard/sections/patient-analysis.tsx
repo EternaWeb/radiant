@@ -3,10 +3,12 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react"
 import {
   ChevronRight,
+  Download,
   FileText,
   Image as ImageIcon,
   Loader2,
   Maximize2,
+  MessageSquare,
   MoreHorizontal,
   Plus,
   Search,
@@ -14,7 +16,6 @@ import {
   Trash2,
   Upload,
   X,
-  Users,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
@@ -22,7 +23,7 @@ import { Button } from "@/components/ui/button"
 import { useApp } from "@/lib/app-context"
 import { formatFindingLabel, formatFindingZone } from "@/lib/lung-zones"
 import { useCases } from "@/lib/use-cases"
-import type { CaseImageLabel, ClinicalRole } from "@/lib/supabase/types"
+import type { CaseImageLabel } from "@/lib/supabase/types"
 import type { CaseRecordView, CaseView } from "@/lib/cases"
 import { BreadcrumbNav } from "../breadcrumb-nav"
 
@@ -40,13 +41,6 @@ type UploadImage = {
   labelNote: string
 }
 
-type StaffMember = {
-  id: string
-  name: string
-  email: string
-  clinicalRole: ClinicalRole
-}
-
 type ClientSearchResult = CaseView["client"]
 
 type ApiPayload<T> = T & {
@@ -62,7 +56,6 @@ export function PatientAnalysis() {
   const [showCaseForm, setShowCaseForm] = useState(false)
   const [showRecordForm, setShowRecordForm] = useState(false)
   const [showManageModal, setShowManageModal] = useState(false)
-  const [staff, setStaff] = useState<StaffMember[]>([])
 
   const activeCase = selectedCase ? cases.find((caseView) => caseView.id === selectedCase.id) ?? selectedCase : null
   const selectedRecord =
@@ -73,21 +66,6 @@ export function PatientAnalysis() {
     const fresh = cases.find((caseView) => caseView.id === selectedCase.id)
     if (fresh) setSelectedCase(fresh)
   }, [cases, selectedCase, setSelectedCase])
-
-  useEffect(() => {
-    if (!isAdmin) return
-
-    async function loadStaff() {
-      const response = await fetch("/api/departments")
-      const payload = (await response.json()) as {
-        departments?: Array<{ staff?: StaffMember[] }>
-      }
-      const flattened = (payload.departments ?? []).flatMap((department) => department.staff ?? [])
-      setStaff(flattened)
-    }
-
-    void loadStaff()
-  }, [isAdmin])
 
   async function readPayload<T>(response: Response): Promise<ApiPayload<T>> {
     const text = await response.text()
@@ -121,6 +99,15 @@ export function PatientAnalysis() {
     }
 
     return payload.record
+  }
+
+  function downloadReport(record: CaseRecordView) {
+    const link = document.createElement("a")
+    link.href = `/api/records/${record.id}/report`
+    link.download = `radiant-record-${record.recordNumber}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
   }
 
   async function createCase(form: NewCaseFormPayload) {
@@ -277,18 +264,30 @@ export function PatientAnalysis() {
               : []),
           ]}
         />
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="accent" onClick={() => setShowCaseForm(true)} data-icon="inline-start">
-            <Plus data-icon="inline-start" /> New Case
-          </Button>
-          {activeCase && (
-            <Button type="button" onClick={() => setShowRecordForm(true)} data-icon="inline-start">
-              <Plus data-icon="inline-start" /> New Record
+        <div className="flex flex-wrap items-center gap-2">
+          {!activeCase && (
+            <Button type="button" variant="accent" onClick={() => setShowCaseForm(true)} data-icon="inline-start">
+              <Plus data-icon="inline-start" /> New Case
             </Button>
           )}
+          {activeCase && (
+            <>
+              <Button type="button" variant="accent" onClick={() => setShowRecordForm(true)} data-icon="inline-start">
+                <Plus data-icon="inline-start" /> New Record
+              </Button>
+              <Button type="button" variant="outline" data-icon="inline-start">
+                <MessageSquare data-icon="inline-start" /> Comment
+              </Button>
+              {selectedRecord && (
+                <Button type="button" onClick={() => downloadReport(selectedRecord)} data-icon="inline-start">
+                  <Download data-icon="inline-start" /> Get Report
+                </Button>
+              )}
+            </>
+          )}
           {activeCase && isAdmin && (
-            <Button type="button" variant="outline" onClick={() => setShowManageModal(true)} data-icon="inline-start">
-              <MoreHorizontal data-icon="inline-start" /> Manage
+            <Button type="button" variant="outline" size="icon" onClick={() => setShowManageModal(true)} aria-label="Manage case">
+              <MoreHorizontal />
             </Button>
           )}
         </div>
@@ -301,38 +300,6 @@ export function PatientAnalysis() {
 
       {activeCase && (
         <div className="flex min-w-0 flex-col gap-5">
-          <CaseListCard cases={cases} loading={loading} activeCaseId={activeCase.id} onOpen={openCase} compact />
-          <CaseHeader caseView={activeCase} selectedRecord={selectedRecord} />
-
-          {isAdmin && (
-            <AssignmentCard
-              caseView={activeCase}
-              staff={staff}
-              busy={busy}
-              onAssign={async (profileId) => {
-                setBusy(true)
-                setFormError(null)
-                try {
-                  const response = await fetch(`/api/cases/${activeCase.id}/assignments`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ profileId, role: "primary" }),
-                  })
-                  const payload = await readPayload<{ case?: CaseView }>(response)
-                  if (!response.ok || !payload.case) {
-                    throw new Error(payload.error ?? "Could not assign doctor.")
-                  }
-                  setSelectedCase(payload.case)
-                  await refresh({ silent: true })
-                } catch (error) {
-                  setFormError(error instanceof Error ? error.message : "Could not assign doctor.")
-                } finally {
-                  setBusy(false)
-                }
-              }}
-            />
-          )}
-
           {selectedRecord ? (
             <RecordAnalysis
               caseView={activeCase}
@@ -607,26 +574,6 @@ function CaseListCard({
   )
 }
 
-function CaseHeader({ caseView, selectedRecord }: { caseView: CaseView; selectedRecord: CaseRecordView | null }) {
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight">{caseView.client.name}</h2>
-        <p className="text-sm text-muted-foreground">
-          {caseView.client.clientCode} · Age {caseView.client.age} · {caseView.title}
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Previous hospitals: {caseView.client.previousHospitals.join(", ") || "None recorded"}
-        </p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Badge variant={caseView.status === "open" ? "success" : "muted"}>{caseView.status}</Badge>
-        {selectedRecord && <Badge variant={riskVariant(selectedRecord.risk)}>{selectedRecord.status}</Badge>}
-      </div>
-    </div>
-  )
-}
-
 function AddRecordModal({
   busy,
   onSubmit,
@@ -735,59 +682,6 @@ function AddRecordModal({
   )
 }
 
-function AssignmentCard({
-  caseView,
-  staff,
-  busy,
-  onAssign,
-}: {
-  caseView: CaseView
-  staff: StaffMember[]
-  busy: boolean
-  onAssign: (profileId: string) => void
-}) {
-  const assignedIds = new Set(caseView.assignments.map((assignment) => assignment.profileId))
-  const available = staff.filter((member) => !assignedIds.has(member.id))
-  const [profileId, setProfileId] = useState("")
-
-  useEffect(() => {
-    setProfileId(available[0]?.id ?? "")
-  }, [available])
-
-  return (
-    <Card>
-      <CardContent className="p-5">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h3 className="flex items-center gap-2 font-semibold">
-            <Users className="h-4 w-4 text-accent-blue" /> Assigned doctors
-          </h3>
-          <Badge variant="muted">{caseView.assignments.length} assigned</Badge>
-        </div>
-        <div className="mb-4 flex flex-wrap gap-2">
-          {caseView.assignments.map((assignment) => (
-            <Badge key={assignment.id} variant={assignment.assignmentRole === "emergency" ? "danger" : "default"}>
-              {assignment.name} · {assignment.assignmentRole}
-            </Badge>
-          ))}
-          {caseView.assignments.length === 0 && <p className="text-sm text-muted-foreground">No doctors assigned yet.</p>}
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <select value={profileId} onChange={(event) => setProfileId(event.target.value)} className={inputClass}>
-            {available.map((member) => (
-              <option key={member.id} value={member.id}>
-                {member.name} · {member.clinicalRole}
-              </option>
-            ))}
-          </select>
-          <Button type="button" disabled={busy || !profileId} onClick={() => onAssign(profileId)}>
-            Assign primary
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
 function RecordAnalysis({
   caseView,
   record,
@@ -818,7 +712,7 @@ function RecordAnalysis({
   }
 
   return (
-    <div className="rounded-xl border border-border bg-[#F4F4F4] p-6 font-mono text-[12px] text-foreground shadow-sm">
+    <div className="rounded-xl bg-[#F4F4F4] p-6 font-mono text-[12px] text-foreground">
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex -space-x-2">
@@ -899,22 +793,25 @@ function RecordAnalysis({
             </dl>
           </section>
 
-          <section className="max-w-2xl">
+          <section className="max-w-3xl font-sans">
             <div className="mb-4 flex items-end justify-between gap-4">
-              <h3 className="font-sans text-xl font-semibold">Report</h3>
-              <div className="text-right text-[10px] uppercase text-muted-foreground">
+              <h3 className="text-xl font-semibold">Report</h3>
+              <div className="font-mono text-right text-[10px] uppercase text-muted-foreground">
                 <p>Main Model</p>
                 <p>{record.date}</p>
               </div>
             </div>
-            <p className="max-w-xl leading-relaxed">{record.summary}</p>
-            <div className="mt-5 grid gap-4 font-sans text-sm leading-relaxed md:grid-cols-2">
+            <div className="rounded-xl bg-white p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Summary</p>
+              <p className="mt-2 max-w-2xl text-base leading-7 text-foreground">{record.summary}</p>
+            </div>
+            <div className="mt-6 grid gap-6 text-sm leading-7 md:grid-cols-2">
               <ReportBlock title="Findings" body={record.findings.map((finding) => `${formatFindingLabel(finding.label)} (${formatFindingZone(finding.zone)}, ${finding.confidence}%)`).join("; ") || "Awaiting AI findings."} />
               <ReportBlock title="Timeline comparison" body={record.comparison} />
               <ReportBlock title="Recommendation" body={record.recommendation} />
               <ReportBlock title="Risk" body={`${record.risk}% - ${record.status}`} />
             </div>
-            <p className="mt-4 font-sans text-xs text-muted-foreground">{record.disclaimer}</p>
+            <p className="mt-6 text-xs leading-5 text-muted-foreground">{record.disclaimer}</p>
           </section>
         </div>
 
@@ -1092,8 +989,8 @@ function CheckBox({ label, checked, onChange }: { label: string; checked: boolea
 
 function ReportBlock({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-lg border border-border bg-background p-4">
-      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+    <div>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
       <p className="text-foreground/90">{body}</p>
     </div>
   )

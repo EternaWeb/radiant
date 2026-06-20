@@ -57,7 +57,7 @@ export function Shell() {
   return (
     <div className="flex min-h-svh bg-background">
       {/* Sidebar */}
-      <aside className="sticky top-0 flex h-svh w-16 flex-col items-center border-r border-sidebar-border bg-sidebar py-4 lg:w-60 lg:items-stretch lg:px-3">
+      <aside className="sticky top-0 flex h-svh w-16 flex-col items-center bg-sidebar py-4 lg:w-60 lg:items-stretch lg:px-3">
         <div className="mb-6 flex items-center justify-center lg:justify-start lg:px-2">
           <RadiantLogo className="h-auto w-10 rounded-md lg:h-8 lg:w-auto" />
         </div>
@@ -104,7 +104,7 @@ export function Shell() {
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-border bg-background px-5 py-3">
+        <header className="sticky top-0 z-20 flex items-center gap-4 bg-background px-5 py-3">
           <h1 className="text-lg font-semibold tracking-tight">{titles[section]}</h1>
           <div className="ml-auto hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 sm:flex">
             <Search className="h-4 w-4 text-muted-foreground" />
@@ -121,7 +121,7 @@ export function Shell() {
         </header>
 
         <main className="flex-1 px-4 pb-4 pt-3 md:px-5 md:pb-5 md:pt-4">
-          <div className="min-h-full rounded-tl-[20px] border border-border bg-[#F4F4F4] p-5 md:p-6">
+          <div className="min-h-full rounded-tl-[20px] bg-[#F4F4F4] p-5 md:p-6">
             {section === "dashboard" && <DashboardHome />}
             {section === "imaging" && <PatientAnalysis />}
             {section === "pacs" && <PacsArchive />}
