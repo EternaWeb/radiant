@@ -58,9 +58,54 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=Radiant <invites@radiant.trymindcore.com>
+
+# Imaging analysis
+HUGGINGFACE_API_KEY=
+HUGGINGFACE_MODEL_ID=google/cxr-foundation
+RISK_HIGH_THRESHOLD=70
+
+# Grad-CAM heatmaps (Hugging Face Space or dedicated endpoint)
+GRADCAM_API_URL=
+
+# Report generation (configure OpenAI or Hugging Face text generation)
+OPENAI_API_KEY=
+OPENAI_REPORT_MODEL=gpt-4o-mini
+HUGGINGFACE_TEXT_MODEL_ID=mistralai/Mistral-7B-Instruct-v0.3
+
+# Optional: comma-separated public PNG/JPEG URLs for /api/studies/seed
+SEED_CHEST_XRAY_URLS=
 ```
 
 Redeploy after saving the variables.
+
+## 5. Hugging Face + AI Pipeline
+
+1. Create a Hugging Face access token with inference permissions.
+2. Add it to Vercel as `HUGGINGFACE_API_KEY`.
+3. Keep `HUGGINGFACE_MODEL_ID=google/cxr-foundation` for the v1 chest X-ray probability engine.
+4. Deploy a Grad-CAM Hugging Face Space or endpoint that accepts `{ "image": "data:image/png;base64,..." }` and returns either:
+   - raw PNG image bytes, or
+   - JSON with `heatmap`, `image`, or `data` as a base64 PNG.
+5. Add that URL as `GRADCAM_API_URL`.
+6. Configure report generation with either:
+   - `OPENAI_API_KEY` and `OPENAI_REPORT_MODEL`, or
+   - `HUGGINGFACE_TEXT_MODEL_ID` plus `HUGGINGFACE_API_KEY`.
+
+The Hugging Face classification model only returns label probabilities. Radiant computes the risk score, Grad-CAM creates the visual attention overlay, and the report layer drafts AI-assisted text for radiologist review.
+
+## 6. Imaging Smoke Test
+
+1. Open the dashboard and go to **Imaging**.
+2. Enter a patient ID, patient name, optional SpO2, fever, and symptoms.
+3. Upload a PNG/JPEG/WebP chest X-ray.
+4. Confirm the study appears in **PACS Archive**.
+5. Click **Upload & analyze** and confirm:
+   - findings are saved,
+   - risk score is computed,
+   - report is generated,
+   - heatmap overlay appears if `GRADCAM_API_URL` is configured,
+   - high-risk studies create an alert and email admins through Resend.
+6. As an admin, call `POST /api/studies/seed` to archive demo NIH chest X-ray samples.
 
 ### Troubleshooting `MIDDLEWARE_INVOCATION_FAILED`
 
@@ -72,7 +117,7 @@ If the site returns **500** with `MIDDLEWARE_INVOCATION_FAILED`, check these fir
 2. **Redeploy after changing env vars** — Vercel does not inject new variables into an existing deployment until you redeploy.
 3. In the Vercel deployment **Functions** log, look for `Cannot find module '@swc/helpers/esm/...'`. If you see that, ensure the project uses a hoisted `node_modules` layout (`.npmrc` with `node-linker=hoisted`) and redeploy.
 
-## 5. Smoke Test
+## 7. Auth Smoke Test
 
 1. Visit `https://radiant.trymindcore.com`.
 2. Sign in with Google as the first user.

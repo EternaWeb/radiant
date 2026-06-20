@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, type ReactNode } from "react"
-import type { Patient } from "@/lib/data"
+import type { StudyView } from "@/lib/studies"
 import type { ClinicalRole, DepartmentRecord, Organization, Profile } from "@/lib/supabase/types"
 
 export type Stage = "welcome" | "login" | "profile" | "role" | "setup" | "readiness" | "app"
@@ -57,9 +57,9 @@ type AppState = {
     department: DepartmentRecord
   }) => void
   resetAuthState: () => void
-  selectedPatient: Patient | null
-  setSelectedPatient: (p: Patient | null) => void
-  openPatient: (p: Patient) => void
+  selectedPatient: StudyView | null
+  setSelectedPatient: (p: StudyView | null) => void
+  openPatient: (p: StudyView) => void
 }
 
 const Ctx = createContext<AppState | null>(null)
@@ -100,9 +100,9 @@ export function AppProvider({
   const [profile, setProfile] = useState<Profile | null>(initialProfile)
   const [organization, setOrganization] = useState<Organization | null>(initialOrganization)
   const [department, setDepartment] = useState<DepartmentRecord | null>(initialDepartment)
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
+  const [selectedPatient, setSelectedPatient] = useState<StudyView | null>(null)
 
-  function openPatient(p: Patient) {
+  function openPatient(p: StudyView) {
     setSelectedPatient(p)
     setSection("imaging")
   }

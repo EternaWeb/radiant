@@ -15,10 +15,12 @@ type Box = {
 
 export function HeatmapViewer({
   image,
-  boxes,
+  heatmapImage,
+  boxes = [],
 }: {
   image: string
-  boxes: Box[]
+  heatmapImage?: string | null
+  boxes?: Box[]
 }) {
   const [showOverlay, setShowOverlay] = useState(true)
 
@@ -26,7 +28,16 @@ export function HeatmapViewer({
     <div className="relative overflow-hidden rounded-xl border border-border bg-black">
       <img src={image || "/placeholder.svg"} alt="Medical scan with AI analysis overlay" className="w-full" />
 
+      {showOverlay && heatmapImage && (
+        <img
+          src={heatmapImage}
+          alt="Grad-CAM model attention overlay"
+          className="absolute inset-0 h-full w-full object-cover opacity-55 mix-blend-screen"
+        />
+      )}
+
       {showOverlay &&
+        !heatmapImage &&
         boxes.map((b, i) => {
           const ring = b.tone === "danger" ? "border-destructive" : "border-warning"
           const chip = b.tone === "danger" ? "bg-destructive text-white" : "bg-warning text-warning-foreground"

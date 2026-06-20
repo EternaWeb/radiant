@@ -15,8 +15,8 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { useApp, type Section } from "@/lib/app-context"
-import { alerts } from "@/lib/data"
 import { formatClinicalRole } from "@/lib/roles"
+import { useAlerts } from "@/lib/use-studies"
 import { DashboardHome } from "./sections/home"
 import { PatientAnalysis } from "./sections/patient-analysis"
 import { PacsArchive } from "./sections/pacs-archive"
@@ -50,6 +50,7 @@ const titles: Record<Section, string> = {
 
 export function Shell() {
   const { section, setSection, profile } = useApp()
+  const { alerts } = useAlerts()
   const displayName = profile?.full_name ?? "Radiant user"
   const displayRole = formatClinicalRole(profile?.clinical_role)
 

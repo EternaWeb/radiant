@@ -5,18 +5,30 @@ import { TriangleAlert, Bell, Check, Clock } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { alerts } from "@/lib/data"
+import { useAlerts } from "@/lib/use-studies"
 import { RiskGauge } from "../risk-gauge"
 
 export function AlertsCenter() {
   const [notified, setNotified] = useState<Record<string, string[]>>({})
+  const { alerts, loading, error, refresh } = useAlerts()
 
-  function notify(alertId: string, dept: string) {
-    setNotified((prev) => {
-      const current = prev[alertId] ?? []
-      if (current.includes(dept)) return prev
-      return { ...prev, [alertId]: [...current, dept] }
+  async function notify(alertId: string, departmentId: string, departmentName: string) {
+    const response = await fetch(`/api/alerts/${alertId}/notify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ departmentId }),
     })
+
+    if (response.ok) {
+      setNotified((prev) => {
+        const current = prev[alertId] ?? []
+        if (current.includes(departmentName)) return prev
+        return { ...prev, [alertId]: [...current, departmentName] }
+      })
+      await refresh()
+    }
   }
 
   return (
@@ -26,6 +38,7 @@ export function AlertsCenter() {
           <TriangleAlert className="h-3.5 w-3.5" /> {alerts.length} active critical alerts
         </span>
       </div>
+      {error && <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
 
       <div className="flex flex-col gap-4">
         {alerts.map((alert) => {
@@ -58,18 +71,18 @@ export function AlertsCenter() {
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {alert.departments.map((dept) => {
-                        const done = sent.includes(dept)
+                        const done = sent.includes(dept.name) || alert.notifiedDepartments.includes(dept.name)
                         return (
                           <Button
-                            key={dept}
+                            key={dept.id}
                             size="sm"
                             variant={done ? "secondary" : "outline"}
                             className="h-8 px-3"
-                            onClick={() => notify(alert.id, dept)}
+                            onClick={() => notify(alert.id, dept.id, dept.name)}
                             data-icon="inline-start"
                           >
                             {done ? <Check data-icon="inline-start" /> : <Bell data-icon="inline-start" />}
-                            {done ? `${dept} notified` : dept}
+                            {done ? `${dept.name} notified` : dept.name}
                           </Button>
                         )
                       })}
@@ -80,6 +93,13 @@ export function AlertsCenter() {
             </Card>
           )
         })}
+        {alerts.length === 0 && (
+          <Card>
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
+              {loading ? "Loading alerts..." : "No active critical alerts."}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )

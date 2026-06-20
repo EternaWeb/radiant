@@ -3,8 +3,8 @@
 import { TrendingUp, TrendingDown, Minus, ArrowRight, Activity } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
-import { kpis, patients } from "@/lib/data"
 import { useApp } from "@/lib/app-context"
+import { useAlerts, useStudies } from "@/lib/use-studies"
 import { HeatmapViewer } from "../heatmap-viewer"
 
 const accentMap = {
@@ -13,16 +13,34 @@ const accentMap = {
   success: "text-success",
 }
 
+type Kpi = {
+  label: string
+  value: string
+  delta: string
+  trend: "up" | "down" | "flat"
+  accent: keyof typeof accentMap
+}
+
 export function DashboardHome() {
-  const { hospital, openPatient, setSection } = useApp()
-  const recent = patients.slice(0, 4)
-  const showcase = patients.find((p) => p.id === "p4")!
+  const { hospital, openPatient, setSection, profile } = useApp()
+  const { studies, loading } = useStudies()
+  const { alerts } = useAlerts()
+  const recent = studies.slice(0, 4)
+  const showcase = studies.find((p) => p.risk >= 70) ?? studies[0] ?? null
+  const completed = studies.filter((study) => study.rawStatus === "analyzed" || study.rawStatus === "critical")
+  const highRiskCount = studies.filter((study) => study.risk >= 70).length
+  const kpis: Kpi[] = [
+    { label: "Images Processed Today", value: String(studies.length), delta: loading ? "Loading" : "Live", trend: "flat", accent: "primary" },
+    { label: "High Risk Cases", value: String(highRiskCount), delta: `${alerts.length} active`, trend: "up", accent: "danger" },
+    { label: "Analyzed Studies", value: String(completed.length), delta: "Archived", trend: "flat", accent: "success" },
+    { label: "Departments Connected", value: hospital.department ? "1+" : "0", delta: "Workspace", trend: "flat", accent: "primary" },
+  ]
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <p className="text-sm text-muted-foreground">Good morning</p>
-        <h2 className="text-2xl font-bold tracking-tight">Dr. Alex Smith</h2>
+        <h2 className="text-2xl font-bold tracking-tight">{profile?.full_name ?? "Radiant clinician"}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {hospital.name} · {hospital.department}
         </p>
@@ -92,34 +110,42 @@ export function DashboardHome() {
                       </td>
                     </tr>
                   ))}
+                  {recent.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                        {loading ? "Loading studies..." : "No studies archived yet."}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </CardContent>
         </Card>
 
-        {/* AI heatmap preview */}
         <Card>
           <CardContent className="p-5">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="font-semibold">AI Heatmap Viewer</h3>
-              <Badge variant="danger">
-                <Activity className="h-3 w-3" /> High risk
+              <Badge variant={showcase ? riskVariant(showcase.risk) : "muted"}>
+                <Activity className="h-3 w-3" /> {showcase ? `${showcase.risk}% risk` : "No study"}
               </Badge>
             </div>
-            <HeatmapViewer
-              image={showcase.image}
-              boxes={[
-                { top: 46, left: 18, width: 26, height: 30, label: "Possible Pneumonia", confidence: 92, tone: "danger" },
-                { top: 32, left: 58, width: 20, height: 22, label: "Opacity", confidence: 87, tone: "warning" },
-              ]}
-            />
-            <button
-              onClick={() => openPatient(showcase)}
-              className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background py-2.5 text-sm font-medium transition-colors hover:bg-muted"
-            >
-              Open full analysis <ArrowRight className="h-4 w-4" />
-            </button>
+            {showcase ? (
+              <>
+                <HeatmapViewer image={showcase.image} heatmapImage={showcase.heatmapImage} />
+                <button
+                  onClick={() => openPatient(showcase)}
+                  className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background py-2.5 text-sm font-medium transition-colors hover:bg-muted"
+                >
+                  Open full analysis <ArrowRight className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+              <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+                Upload a chest X-ray to preview Grad-CAM heatmaps here.
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

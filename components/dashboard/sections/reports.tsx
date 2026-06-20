@@ -3,17 +3,19 @@
 import { FileText, ChevronRight, Sparkles } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
-import { patients } from "@/lib/data"
 import { useApp } from "@/lib/app-context"
+import { useStudies } from "@/lib/use-studies"
 
 const statusVariant = { Critical: "danger", Pending: "warning", Reviewed: "success" } as const
 
 export function Reports() {
   const { openPatient } = useApp()
+  const { studies, loading, error } = useStudies()
 
   return (
     <div className="flex flex-col gap-4">
-      {patients.map((p) => (
+      {error && <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      {studies.map((p) => (
         <Card key={p.id} className="transition-colors hover:border-primary/40">
           <CardContent className="flex cursor-pointer items-center gap-4 p-5" onClick={() => openPatient(p)}>
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-muted text-primary">
@@ -36,6 +38,13 @@ export function Reports() {
           </CardContent>
         </Card>
       ))}
+      {studies.length === 0 && (
+        <Card>
+          <CardContent className="p-8 text-center text-sm text-muted-foreground">
+            {loading ? "Loading reports..." : "No reports have been generated yet."}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

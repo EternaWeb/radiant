@@ -9,6 +9,15 @@ type InviteEmail = {
   inviteUrl: string
 }
 
+type HighRiskAlertEmail = {
+  to: string
+  patientId: string
+  studyUrl: string
+  riskScore: number
+  topFinding: string
+  organizationName: string
+}
+
 function getResend() {
   if (!process.env.RESEND_API_KEY) {
     throw new Error("RESEND_API_KEY is not configured.")
@@ -46,6 +55,40 @@ export async function sendInviteEmail({
           </a>
         </p>
         <p style="font-size: 12px; color: #6b7280;">This invite expires in 7 days.</p>
+      </div>
+    `,
+  })
+}
+
+export async function sendHighRiskAlertEmail({
+  to,
+  patientId,
+  studyUrl,
+  riskScore,
+  topFinding,
+  organizationName,
+}: HighRiskAlertEmail) {
+  const from = process.env.RESEND_FROM_EMAIL
+  if (!from) {
+    throw new Error("RESEND_FROM_EMAIL is not configured.")
+  }
+
+  return getResend().emails.send({
+    from,
+    to,
+    subject: `High-risk Radiant study for ${patientId}`,
+    text: `${organizationName} has a high-risk Radiant study for patient ${patientId}. Risk score: ${riskScore}%. Top finding: ${topFinding}. Review it here: ${studyUrl}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
+        <h1 style="font-size: 22px;">High-risk Radiant study</h1>
+        <p><strong>${organizationName}</strong> has a high-risk imaging study ready for review.</p>
+        <p><strong>Patient:</strong> ${patientId}<br /><strong>Risk score:</strong> ${riskScore}%<br /><strong>Top finding:</strong> ${topFinding}</p>
+        <p>
+          <a href="${studyUrl}" style="display: inline-block; background: #dc2626; color: #ffffff; padding: 10px 16px; border-radius: 8px; text-decoration: none;">
+            Review study
+          </a>
+        </p>
+        <p style="font-size: 12px; color: #6b7280;">AI-assisted output is not a clinical diagnosis. Radiologist review is required.</p>
       </div>
     `,
   })

@@ -4,8 +4,8 @@ import { useState } from "react"
 import { Search, ChevronRight } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
-import { patients } from "@/lib/data"
 import { useApp } from "@/lib/app-context"
+import { useStudies } from "@/lib/use-studies"
 
 const filters = ["All", "X-Ray", "MRI", "CT", "Ultrasound"] as const
 
@@ -15,14 +15,11 @@ export function PacsArchive() {
   const { openPatient } = useApp()
   const [filter, setFilter] = useState<(typeof filters)[number]>("All")
   const [query, setQuery] = useState("")
+  const { studies, loading, error } = useStudies(query)
 
-  const rows = patients.filter((p) => {
+  const rows = studies.filter((p) => {
     const matchFilter = filter === "All" || p.modality === filter
-    const matchQuery =
-      query === "" ||
-      p.name.toLowerCase().includes(query.toLowerCase()) ||
-      p.patientId.toLowerCase().includes(query.toLowerCase())
-    return matchFilter && matchQuery
+    return matchFilter
   })
 
   return (
@@ -53,6 +50,7 @@ export function PacsArchive() {
           ))}
         </div>
       </div>
+      {error && <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
 
       <Card>
         <CardContent className="p-0">
@@ -94,7 +92,7 @@ export function PacsArchive() {
                 {rows.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-5 py-10 text-center text-muted-foreground">
-                      No studies match your filters.
+                      {loading ? "Loading studies..." : "No studies match your filters."}
                     </td>
                   </tr>
                 )}
