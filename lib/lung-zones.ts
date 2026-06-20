@@ -1,5 +1,8 @@
+import type { CaseFindingView } from "@/lib/cases"
 import type { StudyFindingView } from "@/lib/studies"
 import type { FindingZone } from "@/lib/supabase/types"
+
+type FindingInput = Pick<StudyFindingView | CaseFindingView, "label" | "zone" | "confidence">
 
 type LungZoneBox = {
   x: number
@@ -19,6 +22,15 @@ export type HeatmapBox = {
   zoneLabel: string
   confidence: number
   opacity: number
+}
+
+export type GradientLayer = {
+  id: string
+  top: number
+  left: number
+  size: number
+  opacity: number
+  label: string
 }
 
 export const lungZones: Record<FindingZone, LungZoneBox> = {
@@ -47,7 +59,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
 }
 
-export function findingsToHeatmapBoxes(findings: StudyFindingView[]): HeatmapBox[] {
+export function findingsToHeatmapBoxes(findings: FindingInput[]): HeatmapBox[] {
   return findings
     .filter((finding) => finding.label !== "normal")
     .map((finding, index) => {
@@ -65,6 +77,27 @@ export function findingsToHeatmapBoxes(findings: StudyFindingView[]): HeatmapBox
         zoneLabel: formatFindingZone(finding.zone),
         confidence,
         opacity: clamp(confidence / 100, 0.3, 0.8),
+      }
+    })
+}
+
+export function findingsToGradientLayers(findings: FindingInput[]): GradientLayer[] {
+  return findings
+    .filter((finding) => finding.label !== "normal")
+    .map((finding, index) => {
+      const zone = lungZones[finding.zone]
+      const confidence = clamp(finding.confidence, 0, 100)
+      const centerX = (zone.x + zone.w / 2) * 100
+      const centerY = (zone.y + zone.h / 2) * 100
+      const size = Math.max(zone.w, zone.h) * 100 * 1.35
+
+      return {
+        id: `gradient-${finding.label}-${finding.zone}-${index}`,
+        top: centerY,
+        left: centerX,
+        size,
+        opacity: clamp(confidence / 100, 0.25, 0.75),
+        label: formatFindingLabel(finding.label),
       }
     })
 }

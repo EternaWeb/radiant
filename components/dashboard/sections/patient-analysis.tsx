@@ -5,6 +5,7 @@ import {
   ChevronRight,
   ClipboardList,
   Download,
+  ExternalLink,
   FilePlus,
   FileText,
   FolderOpen,
@@ -24,6 +25,7 @@ import {
   Users,
   X,
 } from "lucide-react"
+import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge, riskVariant } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -363,9 +365,16 @@ export function PatientAnalysis() {
                 <MessageSquare data-icon="inline-start" /> Comment
               </Button>
               {selectedRecord && (
-                <Button type="button" onClick={() => downloadReport(selectedRecord)} data-icon="inline-start">
-                  <Download data-icon="inline-start" /> Report
-                </Button>
+                <>
+                  <Button asChild variant="accent" data-icon="inline-start">
+                    <Link href={`/workspace/${selectedRecord.id}`} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink data-icon="inline-start" /> Open Workspace
+                    </Link>
+                  </Button>
+                  <Button type="button" onClick={() => downloadReport(selectedRecord)} data-icon="inline-start">
+                    <Download data-icon="inline-start" /> Report
+                  </Button>
+                </>
               )}
             </>
           )}

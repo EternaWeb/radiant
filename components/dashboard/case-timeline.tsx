@@ -10,23 +10,29 @@ export function CaseTimeline({
   selectedRecordId,
   onSelect,
   onAdd,
+  showAddButton = true,
 }: {
   records: CaseRecordView[]
   selectedRecordId: string | null
   onSelect: (recordId: string) => void
-  onAdd: () => void
+  onAdd?: () => void
+  showAddButton?: boolean
 }) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Case timeline</p>
-          <h3 className="font-semibold">{records.length} record{records.length === 1 ? "" : "s"}</h3>
+          <h3 className="font-semibold">
+            {records.length} record{records.length === 1 ? "" : "s"}
+          </h3>
         </div>
-        <Button type="button" size="sm" onClick={onAdd} data-icon="inline-start">
-          <Plus data-icon="inline-start" />
-          Add record
-        </Button>
+        {showAddButton && onAdd && (
+          <Button type="button" size="sm" onClick={onAdd} data-icon="inline-start">
+            <Plus data-icon="inline-start" />
+            Add record
+          </Button>
+        )}
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-1">
