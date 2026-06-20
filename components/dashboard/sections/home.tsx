@@ -10,7 +10,7 @@ import { useAlerts } from "@/lib/use-studies"
 import { HeatmapViewer } from "../heatmap-viewer"
 
 const accentMap = {
-  primary: "text-primary",
+  primary: "text-accent-blue",
   danger: "text-destructive",
   success: "text-success",
 }
@@ -83,7 +83,7 @@ export function DashboardHome() {
               </div>
               <button
                 onClick={() => setSection("pacs")}
-                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                className="inline-flex items-center gap-1 text-sm text-accent-blue hover:underline"
               >
                 View all <ArrowRight className="h-3.5 w-3.5" />
               </button>

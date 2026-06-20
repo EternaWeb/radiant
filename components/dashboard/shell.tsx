@@ -9,11 +9,11 @@ import {
   Users,
   BarChart3,
   Settings,
-  Activity,
   Search,
   Bell,
   type LucideIcon,
 } from "lucide-react"
+import { RadiantLogo } from "@/components/radiant-logo"
 import { useApp, type Section } from "@/lib/app-context"
 import { formatClinicalRole } from "@/lib/roles"
 import { useAlerts } from "@/lib/use-studies"
@@ -57,12 +57,9 @@ export function Shell() {
   return (
     <div className="flex min-h-svh bg-background">
       {/* Sidebar */}
-      <aside className="sticky top-0 flex h-svh w-16 flex-col items-center border-r border-border bg-sidebar py-4 lg:w-60 lg:items-stretch lg:px-3">
-        <div className="mb-6 flex items-center gap-2 lg:px-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary">
-            <Activity className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <span className="hidden text-base font-semibold tracking-tight lg:block">MedVision AI</span>
+      <aside className="sticky top-0 flex h-svh w-16 flex-col items-center border-r border-sidebar-border bg-sidebar py-4 lg:w-60 lg:items-stretch lg:px-3">
+        <div className="mb-6 flex items-center justify-center lg:justify-start lg:px-2">
+          <RadiantLogo className="h-auto w-10 rounded-md lg:h-8 lg:w-auto" />
         </div>
 
         <nav className="flex flex-1 flex-col gap-1">
@@ -74,9 +71,9 @@ export function Shell() {
                 key={id}
                 onClick={() => setSection(id)}
                 title={label}
-                className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:justify-start ${
+                className={`group relative flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:justify-start ${
                   active
-                    ? "bg-primary/15 text-primary"
+                    ? "bg-muted font-semibold text-foreground"
                     : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
                 }`}
               >
@@ -107,7 +104,7 @@ export function Shell() {
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-border bg-background/80 px-5 py-3 backdrop-blur">
+        <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-border bg-background px-5 py-3">
           <h1 className="text-lg font-semibold tracking-tight">{titles[section]}</h1>
           <div className="ml-auto hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 sm:flex">
             <Search className="h-4 w-4 text-muted-foreground" />
@@ -116,22 +113,24 @@ export function Shell() {
               className="w-44 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60 lg:w-56"
             />
           </div>
-          <button className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:text-foreground">
+          <button className="relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
             <Bell className="h-4 w-4" />
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive" />
           </button>
           <img src="/avatar-doctor.png" alt={displayName} className="h-9 w-9 rounded-full object-cover" />
         </header>
 
-        <main className="flex-1 p-5 md:p-6">
-          {section === "dashboard" && <DashboardHome />}
-          {section === "imaging" && <PatientAnalysis />}
-          {section === "pacs" && <PacsArchive />}
-          {section === "reports" && <Reports />}
-          {section === "alerts" && <AlertsCenter />}
-          {section === "departments" && <Departments />}
-          {section === "analytics" && <Analytics />}
-          {section === "settings" && <SettingsView />}
+        <main className="flex-1 px-4 pb-4 pt-3 md:px-5 md:pb-5 md:pt-4">
+          <div className="min-h-full rounded-tl-[20px] border border-border bg-[#F4F4F4] p-5 md:p-6">
+            {section === "dashboard" && <DashboardHome />}
+            {section === "imaging" && <PatientAnalysis />}
+            {section === "pacs" && <PacsArchive />}
+            {section === "reports" && <Reports />}
+            {section === "alerts" && <AlertsCenter />}
+            {section === "departments" && <Departments />}
+            {section === "analytics" && <Analytics />}
+            {section === "settings" && <SettingsView />}
+          </div>
         </main>
       </div>
     </div>

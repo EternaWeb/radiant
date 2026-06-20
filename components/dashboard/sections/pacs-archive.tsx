@@ -44,8 +44,8 @@ export function PacsArchive() {
               onClick={() => setFilter(f)}
               className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
                 filter === f
-                  ? "border-primary bg-primary/15 text-primary"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground"
+                  ? "border-accent-blue bg-accent-blue/10 text-accent-blue"
+                  : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}
             >
               {f}

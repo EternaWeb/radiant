@@ -12,7 +12,7 @@ export function ProfileSetup() {
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-3xl flex-col justify-center px-6 py-12">
       <Stepper step={1} />
-      <div className="mt-8 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
+      <div className="mt-8 flex h-12 w-12 items-center justify-center rounded-xl bg-accent-blue/15 text-accent-blue">
         <UserRound className="h-6 w-6" />
       </div>
       <h1 className="mt-5 text-balance text-3xl font-bold tracking-tight md:text-4xl">Complete your profile</h1>
@@ -34,7 +34,7 @@ export function ProfileSetup() {
           value={fullName}
           onChange={(event) => setFullName(event.target.value)}
           placeholder="e.g. Dr. Alex Smith"
-          className="h-11 rounded-lg border border-border bg-input px-3.5 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary focus:ring-2 focus:ring-primary/30"
+          className="h-11 rounded-lg border border-border bg-input px-3.5 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/30"
         />
       </label>
 
@@ -45,6 +45,7 @@ export function ProfileSetup() {
           Back
         </Button>
         <Button
+          variant="accent"
           size="lg"
           className="h-11 px-6 text-base"
           disabled={name.length < 2}

@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Activity, ArrowLeft, Loader2 } from "lucide-react"
+import { ArrowLeft, Loader2 } from "lucide-react"
+import { RadiantLogo } from "@/components/radiant-logo"
 import { Button } from "@/components/ui/button"
 import { useApp } from "@/lib/app-context"
 import { createClient } from "@/lib/supabase/client"
@@ -55,21 +56,19 @@ export function Login() {
 
   return (
     <div className="relative flex min-h-svh items-center justify-center overflow-hidden px-6">
-      <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-primary/15 blur-[120px]" />
+      <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-accent-blue/15 blur-[120px]" />
 
       <button
         onClick={() => setStage("welcome")}
-        className="absolute left-6 top-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="absolute left-6 top-6 inline-flex cursor-pointer items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" /> Back
       </button>
 
       <div className="relative z-10 w-full max-w-md">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-            <Activity className="h-6 w-6 text-primary-foreground" />
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight">Sign in to MedVision AI</h1>
+          <RadiantLogo className="mb-4 h-10 rounded-md" />
+          <h1 className="text-2xl font-semibold tracking-tight">Sign in to Radiant</h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
             Use your organization Google account to continue.
           </p>
@@ -79,10 +78,10 @@ export function Login() {
           <button
             onClick={signIn}
             disabled={loading}
-            className="flex w-full items-center justify-center gap-3 rounded-lg border border-border bg-background px-4 py-3 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-70"
+            className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-lg border border-border bg-background px-4 py-3 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
           >
             {loading ? (
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <Loader2 className="h-5 w-5 animate-spin text-accent-blue" />
             ) : (
               <GoogleIcon className="h-5 w-5" />
             )}

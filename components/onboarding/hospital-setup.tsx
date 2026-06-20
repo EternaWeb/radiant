@@ -32,7 +32,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-11 rounded-lg border border-border bg-input px-3.5 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary focus:ring-2 focus:ring-primary/30"
+        className="h-11 rounded-lg border border-border bg-input px-3.5 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/30"
       />
     </label>
   )
@@ -123,7 +123,7 @@ export function HospitalSetup() {
           <ArrowDown className="h-5 w-5 text-muted-foreground" />
           <PipelineNode icon={Database} label="PACS" sub={pacs} tone="primary" />
           <ArrowDown className="h-5 w-5 text-muted-foreground" />
-          <PipelineNode icon={Cpu} label="AI Engine" sub="MedVision Core" tone="success" />
+          <PipelineNode icon={Cpu} label="AI Engine" sub="Radiant Core" tone="success" />
         </div>
       </div>
 
@@ -131,7 +131,7 @@ export function HospitalSetup() {
         <Button variant="ghost" size="lg" onClick={() => setStage("role")}>
           Back
         </Button>
-        <Button size="lg" className="h-11 px-6 text-base" onClick={next} disabled={loading} data-icon="inline-end">
+        <Button variant="accent" size="lg" className="h-11 px-6 text-base" onClick={next} disabled={loading} data-icon="inline-end">
           {loading ? "Saving..." : "Connect System"} <ArrowRight data-icon="inline-end" />
         </Button>
       </div>
@@ -153,7 +153,7 @@ function PipelineNode({
 }) {
   const toneClass = {
     muted: "bg-muted text-muted-foreground",
-    primary: "bg-primary/15 text-primary",
+    primary: "bg-accent-blue/15 text-accent-blue",
     success: "bg-success/15 text-success",
   }[tone]
   return (

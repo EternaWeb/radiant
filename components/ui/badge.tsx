@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 
 const variants = {
-  default: "bg-primary/15 text-primary border-primary/20",
+  default: "bg-accent-blue/15 text-accent-blue border-accent-blue/20",
   success: "bg-success/15 text-success border-success/20",
   warning: "bg-warning/15 text-warning border-warning/20",
   danger: "bg-destructive/15 text-destructive border-destructive/20",

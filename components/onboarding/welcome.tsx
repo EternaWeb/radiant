@@ -1,6 +1,7 @@
 "use client"
 
-import { Activity, Brain, Database, ShieldAlert, Users, ArrowRight } from "lucide-react"
+import { Brain, Database, ShieldAlert, Users, ArrowRight } from "lucide-react"
+import { RadiantLogo } from "@/components/radiant-logo"
 import { Button } from "@/components/ui/button"
 import { useApp } from "@/lib/app-context"
 
@@ -19,7 +20,7 @@ export function Welcome() {
   return (
     <div className="relative flex min-h-svh flex-col overflow-hidden">
       {/* ambient glow */}
-      <div className="pointer-events-none absolute -top-40 left-1/2 h-[36rem] w-[36rem] -translate-x-1/2 rounded-full bg-primary/15 blur-[120px]" />
+      <div className="pointer-events-none absolute -top-40 left-1/2 h-[36rem] w-[36rem] -translate-x-1/2 rounded-full bg-accent-blue/15 blur-[120px]" />
       <div className="pointer-events-none absolute bottom-0 right-0 h-96 w-96 rounded-full bg-chart-5/10 blur-[100px]" />
 
       {/* floating scan slices */}
@@ -44,10 +45,7 @@ export function Welcome() {
 
       <header className="relative z-10 flex items-center justify-between px-6 py-5 md:px-12">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-            <Activity className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <span className="text-lg font-semibold tracking-tight">MedVision AI</span>
+          <RadiantLogo className="h-8 rounded-md" />
         </div>
         <Button variant="ghost" size="lg" onClick={() => setStage("login")}>
           Login
@@ -62,13 +60,14 @@ export function Welcome() {
           </span>
           AI Engine online
         </span>
-        <h1 className="text-balance text-5xl font-bold tracking-tight md:text-7xl">MedVision AI</h1>
+        <h1 className="text-balance text-5xl font-bold tracking-tight md:text-7xl">Radiant</h1>
         <p className="mt-4 text-balance text-lg text-muted-foreground md:text-xl">
           AI-powered Medical Imaging Analysis Platform
         </p>
 
         <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row">
           <Button
+            variant="accent"
             size="lg"
             className="h-11 px-6 text-base"
             onClick={() => setStage("login")}
@@ -92,7 +91,7 @@ export function Welcome() {
               key={label}
               className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card/50 p-4 backdrop-blur"
             >
-              <Icon className="h-5 w-5 text-primary" />
+              <Icon className="h-5 w-5 text-accent-blue" />
               <span className="text-xs font-medium text-muted-foreground">{label}</span>
             </div>
           ))}

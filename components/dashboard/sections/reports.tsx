@@ -18,9 +18,9 @@ export function Reports() {
     <div className="flex flex-col gap-4">
       {error && <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
       {rows.map(({ caseView, record }) => (
-        <Card key={caseView.id} className="transition-colors hover:border-primary/40">
+        <Card key={caseView.id} className="transition-colors hover:border-accent-blue/40">
           <CardContent className="flex cursor-pointer items-center gap-4 p-5" onClick={() => openCase(caseView, record?.id)}>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-muted text-primary">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-muted text-accent-blue">
               <FileText className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">

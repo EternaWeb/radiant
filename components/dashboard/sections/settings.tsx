@@ -66,7 +66,7 @@ export function SettingsView() {
       <Card>
         <CardContent className="p-5">
           <h3 className="mb-4 flex items-center gap-2 font-semibold">
-            <UserRound className="h-4 w-4 text-primary" /> Profile
+            <UserRound className="h-4 w-4 text-accent-blue" /> Profile
           </h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <Row label="User ID" value={profile?.id ?? "Pending"} />
@@ -81,7 +81,7 @@ export function SettingsView() {
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
                 placeholder="+1 (555) 000-0000"
-                className="h-10 flex-1 rounded-lg border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-primary"
+                className="h-10 flex-1 rounded-lg border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-accent-blue"
               />
               <Button onClick={savePhone} disabled={saving} className="h-10 px-4" data-icon="inline-start">
                 <Save data-icon="inline-start" /> {saving ? "Saving..." : "Save"}
@@ -95,7 +95,7 @@ export function SettingsView() {
       <Card>
         <CardContent className="p-5">
           <h3 className="mb-4 flex items-center gap-2 font-semibold">
-            <Database className="h-4 w-4 text-primary" /> Connection
+            <Database className="h-4 w-4 text-accent-blue" /> Connection
           </h3>
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <Row label="Hospital" value={hospital.name} />
@@ -110,7 +110,7 @@ export function SettingsView() {
       <Card>
         <CardContent className="p-5">
           <h3 className="mb-4 flex items-center gap-2 font-semibold">
-            <Cpu className="h-4 w-4 text-primary" /> AI Engine
+            <Cpu className="h-4 w-4 text-accent-blue" /> AI Engine
           </h3>
           <div className="flex flex-col gap-4">
             <SettingRow icon={Cpu} label="Auto-analyze incoming studies" desc="Run AI on every new DICOM as it arrives" />
@@ -159,7 +159,7 @@ function SettingRow({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-primary">
+      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-accent-blue">
         <Icon className="h-4 w-4" />
       </div>
       <div className="flex-1">

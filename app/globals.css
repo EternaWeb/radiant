@@ -27,6 +27,8 @@
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
+  --color-accent-blue-foreground: var(--accent-blue-foreground);
+  --color-accent-blue: var(--accent-blue);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -55,28 +57,30 @@
 }
 
 :root {
-  color-scheme: dark;
-  --background: #0b1220;
-  --foreground: #e6edf7;
-  --card: #111827;
-  --card-foreground: #e6edf7;
-  --popover: #111827;
-  --popover-foreground: #e6edf7;
-  --primary: #3b82f6;
-  --primary-foreground: #f8fbff;
-  --secondary: #1a2435;
-  --secondary-foreground: #e6edf7;
-  --muted: #1a2435;
-  --muted-foreground: #8b9bb4;
-  --accent: #1e2a3f;
-  --accent-foreground: #e6edf7;
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --primary: #000000;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f4;
+  --secondary-foreground: #0a0a0a;
+  --muted: #f4f4f4;
+  --muted-foreground: #737373;
+  --accent: #f4f4f4;
+  --accent-foreground: #0a0a0a;
+  --accent-blue: #3b82f6;
+  --accent-blue-foreground: #ffffff;
   --destructive: #ef4444;
   --success: #22c55e;
   --success-foreground: #06200f;
   --warning: #f59e0b;
   --warning-foreground: #2a1a02;
-  --border: #1e2a3f;
-  --input: #1a2435;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
   --ring: #3b82f6;
   --chart-1: #3b82f6;
   --chart-2: #22c55e;
@@ -84,13 +88,13 @@
   --chart-4: #ef4444;
   --chart-5: #60a5fa;
   --radius: 0.75rem;
-  --sidebar: #0d1526;
-  --sidebar-foreground: #e6edf7;
-  --sidebar-primary: #3b82f6;
-  --sidebar-primary-foreground: #f8fbff;
-  --sidebar-accent: #1a2435;
-  --sidebar-accent-foreground: #e6edf7;
-  --sidebar-border: #1e2a3f;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0a0a0a;
+  --sidebar-primary: #000000;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f4f4f4;
+  --sidebar-accent-foreground: #0a0a0a;
+  --sidebar-border: #e5e5e5;
   --sidebar-ring: #3b82f6;
 }
 
@@ -103,6 +107,10 @@
   }
   html {
     @apply font-sans;
+  }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
   }
 }
 

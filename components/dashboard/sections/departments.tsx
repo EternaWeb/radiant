@@ -155,7 +155,7 @@ export function Departments() {
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent-blue/15 text-accent-blue">
               <Building2 className="h-6 w-6" />
             </div>
             <div>
@@ -189,10 +189,10 @@ export function Departments() {
             <button
               key={department.id}
               onClick={() => setActiveId(department.id)}
-              className="group rounded-xl border border-border bg-card p-5 text-left transition-all hover:border-primary/50 hover:bg-muted/40 hover:shadow-lg hover:shadow-primary/5"
+              className="group rounded-xl border border-border bg-card p-5 text-left transition-all hover:border-accent-blue/50 hover:bg-muted/40 hover:shadow-lg hover:shadow-accent-blue/5"
             >
               <div className="flex items-start justify-between">
-                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-muted text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-muted text-accent-blue transition-colors group-hover:bg-accent-blue group-hover:text-accent-blue-foreground">
                   <Icon className="h-5 w-5" />
                 </div>
                 <Badge variant="muted">
@@ -249,7 +249,7 @@ function DepartmentDetail({
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-primary">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-accent-blue">
               <Icon className="h-6 w-6" />
             </div>
             <div>
@@ -263,7 +263,7 @@ function DepartmentDetail({
           {isAdmin && (
             <button
               onClick={() => setModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent-blue px-4 py-2.5 text-sm font-medium text-accent-blue-foreground transition-colors hover:bg-accent-blue/90"
             >
               <UserPlus className="h-4 w-4" /> Add member
             </button>
@@ -381,7 +381,7 @@ function MemberCard({
           <button
             onClick={handleGrantAdmin}
             disabled={granting}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-accent-blue hover:bg-accent-blue/10 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Crown className="h-3.5 w-3.5" /> {granting ? "Granting..." : "Grant Administrator"}
           </button>
@@ -500,8 +500,8 @@ function InviteModal({
                     onClick={() => setRole(candidate)}
                     className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
                       role === candidate
-                        ? "border-primary bg-primary/10 text-foreground"
-                        : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                        ? "border-accent-blue bg-accent-blue/10 text-foreground"
+                        : "border-border text-muted-foreground hover:border-accent-blue/50 hover:text-foreground"
                     }`}
                   >
                     {candidate}
@@ -520,7 +520,7 @@ function InviteModal({
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="name@hospital.org"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-accent-blue"
               />
             </div>
 
@@ -536,7 +536,7 @@ function InviteModal({
               <button
                 onClick={handleSend}
                 disabled={!valid || sending}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-accent-blue px-4 py-2.5 text-sm font-medium text-accent-blue-foreground transition-colors hover:bg-accent-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Send className="h-4 w-4" /> {sending ? "Sending..." : "Send invite"}
               </button>

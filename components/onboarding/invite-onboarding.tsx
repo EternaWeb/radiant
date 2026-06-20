@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowRight, Building2, Loader2, Mail, Stethoscope, UserRound } from "lucide-react"
+import { ArrowRight, Building2, Loader2, Mail, Stethoscope } from "lucide-react"
+import { RadiantLogo } from "@/components/radiant-logo"
 import { Button } from "@/components/ui/button"
 import type { ClinicalRole } from "@/lib/supabase/types"
 
@@ -70,11 +71,9 @@ export function InviteOnboarding({
 
   return (
     <div className="relative flex min-h-svh items-center justify-center overflow-hidden px-6 py-12">
-      <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-primary/15 blur-[120px]" />
+      <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-accent-blue/15 blur-[120px]" />
       <div className="relative z-10 w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-xl">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
-          <UserRound className="h-6 w-6" />
-        </div>
+        <RadiantLogo className="h-10 rounded-md" />
         <h1 className="mt-5 text-balance text-3xl font-bold tracking-tight">Complete your invite</h1>
         <p className="mt-2 text-muted-foreground">
           Your hospital, department, and role are already set by the workspace admin. Enter your name to join the
@@ -99,11 +98,12 @@ export function InviteOnboarding({
             value={fullName}
             onChange={(event) => setFullName(event.target.value)}
             placeholder="e.g. Dr. Alex Smith"
-            className="h-11 rounded-lg border border-border bg-input px-3.5 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary focus:ring-2 focus:ring-primary/30"
+            className="h-11 rounded-lg border border-border bg-input px-3.5 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/30"
           />
         </label>
 
         <Button
+          variant="accent"
           size="lg"
           className="mt-6 h-11 w-full px-6 text-base"
           onClick={acceptInvite}

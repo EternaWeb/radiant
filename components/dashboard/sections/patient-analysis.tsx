@@ -24,10 +24,10 @@ import { BreadcrumbNav } from "../breadcrumb-nav"
 import { CaseTimeline } from "../case-timeline"
 
 const inputClass =
-  "h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
+  "h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-accent-blue"
 
 const textareaClass =
-  "min-h-24 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
+  "min-h-24 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-accent-blue"
 
 const imageLabels: CaseImageLabel[] = ["front", "left", "right", "posterior", "lateral", "other"]
 
@@ -407,7 +407,7 @@ function CaseListCard({
                 type="button"
                 onClick={() => onOpen(caseView)}
                 className={`rounded-lg border p-3 text-left transition-colors ${
-                  activeCaseId === caseView.id ? "border-primary bg-primary/10" : "border-border bg-background hover:bg-muted/50"
+                  activeCaseId === caseView.id ? "border-accent-blue bg-accent-blue/10" : "border-border bg-background hover:bg-muted/50"
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -551,7 +551,7 @@ function AddRecordCard({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={busy} data-icon="inline-start">
+            <Button type="submit" variant="accent" disabled={busy} data-icon="inline-start">
               {busy ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Sparkles data-icon="inline-start" />}
               Add & analyze
             </Button>
@@ -589,7 +589,7 @@ function AssignmentCard({
       <CardContent className="p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="flex items-center gap-2 font-semibold">
-            <Users className="h-4 w-4 text-primary" /> Assigned doctors
+            <Users className="h-4 w-4 text-accent-blue" /> Assigned doctors
           </h3>
           <Badge variant="muted">{caseView.assignments.length} assigned</Badge>
         </div>
@@ -651,10 +651,10 @@ function RecordAnalysis({ record, onAnalyze }: { record: CaseRecordView; onAnaly
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <h3 className="flex items-center gap-2 font-semibold">
-                  <Sparkles className="h-4 w-4 text-primary" /> AI Findings
+                  <Sparkles className="h-4 w-4 text-accent-blue" /> AI Findings
                 </h3>
                 {record.rawStatus !== "analyzed" && record.rawStatus !== "critical" && (
-                  <Button size="sm" onClick={runAnalyze} disabled={analyzing} data-icon="inline-start">
+                  <Button variant="accent" size="sm" onClick={runAnalyze} disabled={analyzing} data-icon="inline-start">
                     {analyzing ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Sparkles data-icon="inline-start" />}
                     Analyze
                   </Button>
@@ -699,7 +699,7 @@ function RecordAnalysis({ record, onAnalyze }: { record: CaseRecordView; onAnaly
         <CardContent className="p-5">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="flex items-center gap-2 font-semibold">
-              <FileText className="h-4 w-4 text-primary" /> Structured Diagnostic Report
+              <FileText className="h-4 w-4 text-accent-blue" /> Structured Diagnostic Report
             </h3>
             <Badge variant="muted">
               <Sparkles className="h-3 w-3" /> AI assisted
@@ -722,7 +722,7 @@ function RecordAnalysis({ record, onAnalyze }: { record: CaseRecordView; onAnaly
           <p className="mt-4 text-xs text-muted-foreground">{record.disclaimer}</p>
 
           <div className="mt-5">
-            <Button size="lg" className="h-10 px-5" onClick={() => setApproved(true)} disabled={approved} data-icon="inline-start">
+            <Button variant="accent" size="lg" className="h-10 px-5" onClick={() => setApproved(true)} disabled={approved} data-icon="inline-start">
               <Check data-icon="inline-start" />
               {approved ? "Approved & Saved" : "Approve & Save"}
             </Button>

@@ -38,7 +38,7 @@ export function CaseTimeline({
               type="button"
               onClick={() => onSelect(record.id)}
               className={`min-w-56 rounded-lg border p-3 text-left transition-colors ${
-                active ? "border-primary bg-primary/10" : "border-border bg-background hover:bg-muted/50"
+                active ? "border-accent-blue bg-accent-blue/10" : "border-border bg-background hover:bg-muted/50"
               }`}
             >
               <div className="mb-2 flex items-center justify-between gap-2">

@@ -42,20 +42,20 @@ export function RoleSelect() {
               onClick={() => setSelected(roleId)}
               className={`group relative flex flex-col gap-3 rounded-2xl border p-5 text-left transition-all ${
                 active
-                  ? "border-primary bg-primary/5 ring-2 ring-primary/30"
-                  : "border-border bg-card hover:border-primary/40 hover:bg-card/80"
+                  ? "border-accent-blue bg-accent-blue/5 ring-2 ring-accent-blue/30"
+                  : "border-border bg-card hover:border-accent-blue/40 hover:bg-card/80"
               }`}
             >
               <div className="flex items-center justify-between">
                 <div
                   className={`flex h-11 w-11 items-center justify-center rounded-xl ${
-                    active ? "bg-primary text-primary-foreground" : "bg-muted text-primary"
+                    active ? "bg-accent-blue text-accent-blue-foreground" : "bg-muted text-accent-blue"
                   }`}
                 >
                   <Icon className="h-5 w-5" />
                 </div>
                 {active && (
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-blue text-accent-blue-foreground">
                     <Check className="h-3.5 w-3.5" />
                   </span>
                 )}
@@ -73,7 +73,7 @@ export function RoleSelect() {
         <Button variant="ghost" size="lg" onClick={() => setStage("login")}>
           Back
         </Button>
-        <Button size="lg" className="h-11 px-6 text-base" onClick={next} data-icon="inline-end">
+        <Button variant="accent" size="lg" className="h-11 px-6 text-base" onClick={next} data-icon="inline-end">
           Continue <ArrowRight data-icon="inline-end" />
         </Button>
       </div>
@@ -94,7 +94,7 @@ export function Stepper({ step }: { step: number }) {
             <span
               className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
                 active
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-accent-blue text-accent-blue-foreground"
                   : done
                     ? "bg-success text-success-foreground"
                     : "bg-muted text-muted-foreground"
