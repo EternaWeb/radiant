@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { isApiError, requireCompletedProfile } from "@/lib/api-auth"
 import { canAccessRecord } from "@/lib/case-access"
-import { mapRecordRow } from "@/lib/case-mappers"
+import { mapRecordRowWithUrls } from "@/lib/case-mappers"
 import { clientDisplayName } from "@/lib/cases"
 import { formatFindingLabel, formatFindingZone } from "@/lib/lung-zones"
 import { recordSelect } from "@/lib/case-queries"
@@ -112,7 +112,7 @@ export async function GET(_request: Request, context: Context) {
     return NextResponse.json({ error: error?.message ?? "Record not found." }, { status: 404 })
   }
 
-  const record = await mapRecordRow(auth.service, data)
+  const record = await mapRecordRowWithUrls(auth.service, data)
   const raw = data as any
   const client = raw.cases?.clients
   const patientName = client ? clientDisplayName(client) : "Unknown patient"

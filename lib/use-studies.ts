@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import type { CaseAlertView } from "@/lib/cases"
 import type { StudyView } from "@/lib/studies"
+import { useDashboardData } from "@/lib/dashboard-data"
 
 type StudiesState = {
   studies: StudyView[]
@@ -35,8 +36,8 @@ export function useStudies(query = ""): StudiesState {
 
       setStudies(payload.studies ?? [])
       setLoading(false)
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not load studies.")
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Could not load studies.")
       setLoading(false)
     }
   }, [query])
@@ -44,8 +45,8 @@ export function useStudies(query = ""): StudiesState {
   useEffect(() => {
     void refresh()
     const interval = window.setInterval(() => {
-      void refresh({ silent: true })
-    }, 15000)
+      if (document.visibilityState === "visible") void refresh({ silent: true })
+    }, 30_000)
 
     return () => window.clearInterval(interval)
   }, [refresh])
@@ -53,7 +54,14 @@ export function useStudies(query = ""): StudiesState {
   return { studies, loading, error, refresh }
 }
 
-export function useAlerts() {
+type AlertsState = {
+  alerts: CaseAlertView[]
+  loading: boolean
+  error: string | null
+  refresh: (options?: { silent?: boolean }) => Promise<void>
+}
+
+function useLocalAlerts(): AlertsState {
   const [alerts, setAlerts] = useState<CaseAlertView[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -74,8 +82,8 @@ export function useAlerts() {
 
       setAlerts(payload.alerts ?? [])
       setLoading(false)
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not load alerts.")
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Could not load alerts.")
       setLoading(false)
     }
   }, [])
@@ -83,11 +91,27 @@ export function useAlerts() {
   useEffect(() => {
     void refresh()
     const interval = window.setInterval(() => {
-      void refresh({ silent: true })
-    }, 10000)
+      if (document.visibilityState === "visible") void refresh({ silent: true })
+    }, 30_000)
 
     return () => window.clearInterval(interval)
   }, [refresh])
 
   return { alerts, loading, error, refresh }
+}
+
+export function useAlerts(): AlertsState {
+  const dashboard = useDashboardData()
+  const local = useLocalAlerts()
+
+  if (!dashboard) {
+    return local
+  }
+
+  return {
+    alerts: dashboard.alerts,
+    loading: dashboard.alertsLoading,
+    error: dashboard.alertsError,
+    refresh: dashboard.refreshAlerts,
+  }
 }

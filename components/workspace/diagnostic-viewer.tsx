@@ -11,6 +11,7 @@ import { DiagnosticImageViewer } from "@/components/workspace/diagnostic-image-v
 import { ViewerToolbar } from "@/components/workspace/viewer-toolbar"
 import { formatFindingLabel, formatFindingZone, findingsToGradientLayers, findingsToHeatmapBoxes } from "@/lib/lung-zones"
 import { resolveOverlayFindings } from "@/lib/overlay-findings"
+import { loadDepartmentsCached } from "@/lib/use-departments"
 import { useWorkspaceRecord } from "@/lib/use-workspace-record"
 import { confidenceLabel, priorRecordImage, useViewerControls } from "@/lib/viewer-utils"
 
@@ -60,8 +61,7 @@ export function DiagnosticViewer({ recordId }: { recordId: string }) {
 
   async function loadDepartments() {
     if (departments.length > 0) return
-    const response = await fetch("/api/departments")
-    const payload = (await response.json()) as { departments?: { id: string; name: string }[] }
+    const payload = await loadDepartmentsCached()
     setDepartments(payload.departments ?? [])
   }
 

@@ -13,6 +13,7 @@ import { RiskGauge } from "@/components/dashboard/risk-gauge"
 import { WorkspaceChrome } from "@/components/workspace/workspace-chrome"
 import { formatFindingLabel, findingsToGradientLayers, findingsToHeatmapBoxes } from "@/lib/lung-zones"
 import { resolveOverlayFindings } from "@/lib/overlay-findings"
+import { loadDepartmentsCached } from "@/lib/use-departments"
 import { useWorkspaceRecord } from "@/lib/use-workspace-record"
 import { useAlerts } from "@/lib/use-studies"
 import { confidenceLabel } from "@/lib/viewer-utils"
@@ -51,8 +52,7 @@ export function ClinicalWorkspace({ recordId }: { recordId: string }) {
 
   async function loadDepartments() {
     if (departmentsLoaded) return
-    const response = await fetch("/api/departments")
-    const payload = (await response.json()) as { departments?: DepartmentOption[] }
+    const payload = await loadDepartmentsCached()
     setDepartments(payload.departments ?? [])
     setDepartmentsLoaded(true)
   }

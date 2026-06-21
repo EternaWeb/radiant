@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { isApiError, requireCompletedProfile } from "@/lib/api-auth"
 import { canAccessRecord } from "@/lib/case-access"
-import { mapRecordRow } from "@/lib/case-mappers"
+import { mapRecordRowWithUrls } from "@/lib/case-mappers"
 import { recordSelect } from "@/lib/case-queries"
 import { analyzeCaseRecordWithGptVision, GptVisionAnalysisError } from "@/lib/gpt-vision"
 import { sendHighRiskAlertEmail } from "@/lib/resend"
@@ -335,7 +335,7 @@ export async function POST(_request: Request, context: Context) {
     if (reloadError || !reloaded) throw new Error(reloadError?.message ?? "Could not reload record.")
 
     return NextResponse.json({
-      record: await mapRecordRow(auth.service, reloaded),
+      record: await mapRecordRowWithUrls(auth.service, reloaded),
       debug: debugPayload({ durationMs: Date.now() - startedAt }),
     })
   } catch (error) {

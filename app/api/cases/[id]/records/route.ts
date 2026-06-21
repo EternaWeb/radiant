@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { isApiError, requireCompletedProfile } from "@/lib/api-auth"
 import { canAccessCase } from "@/lib/case-access"
-import { mapCaseRows, mapRecordRow } from "@/lib/case-mappers"
+import { mapCaseRows, mapRecordRowWithUrls } from "@/lib/case-mappers"
 import { caseSelect, recordSelect } from "@/lib/case-queries"
 import type { StudyModality } from "@/lib/supabase/types"
 
@@ -51,7 +51,7 @@ export async function POST(request: Request, context: Context) {
 
   const [{ data: caseRows }, recordView] = await Promise.all([
     (auth.service.from("cases") as any).select(caseSelect).eq("id", id),
-    mapRecordRow(auth.service, record as any),
+    mapRecordRowWithUrls(auth.service, record as any),
   ])
   const [caseView] = await mapCaseRows(auth.service, caseRows ?? [])
 

@@ -28,6 +28,7 @@ import { UserAvatar } from "@/components/user-avatar"
 import { departmentRoles } from "@/lib/data"
 import { DEPARTMENT_ICONS } from "@/lib/departments"
 import { parseClinicalRole } from "@/lib/roles"
+import { fetchCached, invalidateCached } from "@/lib/client-cache"
 import { useApp } from "@/lib/app-context"
 
 type StaffStatus = "Online" | "On call" | "Off duty"
@@ -92,21 +93,22 @@ export function Departments() {
   const [error, setError] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
 
-  async function loadDepartments() {
+  async function loadDepartments(force = false) {
     setLoading(true)
     setError(null)
-    const response = await fetch("/api/departments")
-    const result = (await response.json()) as DepartmentsResponse
-    setLoading(false)
 
-    if (!response.ok) {
-      setError(result.error ?? "Could not load departments.")
-      return
+    if (force) invalidateCached("/api/departments")
+
+    try {
+      const result = await fetchCached<DepartmentsResponse>("/api/departments", 60_000)
+      setOrganizationName(result.organization?.name ?? "Hospital organization")
+      setOrganizationLogoUrl(result.organization?.logoUrl ?? null)
+      setDepartments(result.departments ?? [])
+    } catch {
+      setError("Could not load departments.")
+    } finally {
+      setLoading(false)
     }
-
-    setOrganizationName(result.organization?.name ?? "Hospital organization")
-    setOrganizationLogoUrl(result.organization?.logoUrl ?? null)
-    setDepartments(result.departments ?? [])
   }
 
   useEffect(() => {
@@ -124,7 +126,7 @@ export function Departments() {
       return
     }
 
-    await loadDepartments()
+    await loadDepartments(true)
   }
 
   async function grantAdmin(staffId: string) {
@@ -140,7 +142,7 @@ export function Departments() {
       return
     }
 
-    await loadDepartments()
+    await loadDepartments(true)
   }
 
   const active = departments.find((department) => department.id === activeId) ?? null
@@ -256,7 +258,7 @@ export function Departments() {
           onClose={() => setCreateOpen(false)}
           onCreated={async () => {
             setCreateOpen(false)
-            await loadDepartments()
+            await loadDepartments(true)
           }}
         />
       )}

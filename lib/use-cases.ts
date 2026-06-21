@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react"
 import type { CaseView } from "@/lib/cases"
+import { filterCasesByQuery, useDashboardData } from "@/lib/dashboard-data"
 
 type CasesState = {
   cases: CaseView[]
   loading: boolean
   error: string | null
   refresh: (options?: { silent?: boolean }) => Promise<void>
+  patchCase: (caseView: CaseView) => void
+  removeCase: (caseId: string) => void
+  prependCase: (caseView: CaseView) => void
 }
 
 type CaseState = {
@@ -17,7 +21,7 @@ type CaseState = {
   refresh: (options?: { silent?: boolean }) => Promise<void>
 }
 
-export function useCases(query = ""): CasesState {
+function useLocalCases(query: string): CasesState {
   const [cases, setCases] = useState<CaseView[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -41,22 +45,56 @@ export function useCases(query = ""): CasesState {
 
       setCases(payload.cases ?? [])
       setLoading(false)
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not load cases.")
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Could not load cases.")
       setLoading(false)
     }
   }, [query])
 
   useEffect(() => {
     void refresh()
-    const interval = window.setInterval(() => {
-      void refresh({ silent: true })
-    }, 15000)
-
-    return () => window.clearInterval(interval)
   }, [refresh])
 
-  return { cases, loading, error, refresh }
+  return {
+    cases,
+    loading,
+    error,
+    refresh,
+    patchCase: (caseView) => {
+      setCases((current) => {
+        const index = current.findIndex((item) => item.id === caseView.id)
+        if (index === -1) return [caseView, ...current]
+        const next = current.slice()
+        next[index] = caseView
+        return next
+      })
+    },
+    removeCase: (caseId) => {
+      setCases((current) => current.filter((item) => item.id !== caseId))
+    },
+    prependCase: (caseView) => {
+      setCases((current) => [caseView, ...current.filter((item) => item.id !== caseView.id)])
+    },
+  }
+}
+
+export function useCases(query = ""): CasesState {
+  const dashboard = useDashboardData()
+  const local = useLocalCases(dashboard ? "" : query)
+
+  if (!dashboard) {
+    return local
+  }
+
+  return {
+    cases: filterCasesByQuery(dashboard.cases, query),
+    loading: dashboard.casesLoading,
+    error: dashboard.casesError,
+    refresh: dashboard.refreshCases,
+    patchCase: dashboard.patchCase,
+    removeCase: dashboard.removeCase,
+    prependCase: dashboard.prependCase,
+  }
 }
 
 export function useCase(caseId: string | null): CaseState {
@@ -87,8 +125,8 @@ export function useCase(caseId: string | null): CaseState {
 
       setCaseView(payload.case ?? null)
       setLoading(false)
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not load case.")
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Could not load case.")
       setLoading(false)
     }
   }, [caseId])
@@ -98,8 +136,8 @@ export function useCase(caseId: string | null): CaseState {
     if (!caseId) return
 
     const interval = window.setInterval(() => {
-      void refresh({ silent: true })
-    }, 10000)
+      if (document.visibilityState === "visible") void refresh({ silent: true })
+    }, 30_000)
 
     return () => window.clearInterval(interval)
   }, [caseId, refresh])

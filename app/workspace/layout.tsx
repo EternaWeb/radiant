@@ -1,3 +1,4 @@
+import { WorkspaceProviders } from "@/components/workspace/workspace-providers"
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import type { ReactNode } from "react"
@@ -18,5 +19,9 @@ export default async function WorkspaceLayout({ children }: { children: ReactNod
     redirect("/")
   }
 
-  return <div className="min-h-svh bg-background text-foreground">{children}</div>
+  return (
+    <WorkspaceProviders>
+      <div className="min-h-svh bg-background text-foreground">{children}</div>
+    </WorkspaceProviders>
+  )
 }

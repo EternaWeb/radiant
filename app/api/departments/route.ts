@@ -67,15 +67,22 @@ export async function GET() {
     }
   })
 
-  return NextResponse.json({
-    organization: {
-      id: organization?.id ?? profile.organization_id,
-      name: hospitalName,
-      logoUrl: organization?.logo_url ?? null,
+  return NextResponse.json(
+    {
+      organization: {
+        id: organization?.id ?? profile.organization_id,
+        name: hospitalName,
+        logoUrl: organization?.logo_url ?? null,
+      },
+      departments: rows,
+      isAdmin: profile.is_admin,
     },
-    departments: rows,
-    isAdmin: profile.is_admin,
-  })
+    {
+      headers: {
+        "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+      },
+    },
+  )
 }
 
 export async function POST(request: Request) {

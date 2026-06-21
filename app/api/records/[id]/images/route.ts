@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { isApiError, requireCompletedProfile } from "@/lib/api-auth"
 import { canAccessRecord } from "@/lib/case-access"
-import { mapRecordRow } from "@/lib/case-mappers"
+import { mapRecordRowWithUrls } from "@/lib/case-mappers"
 import { recordSelect } from "@/lib/case-queries"
 import type { CaseImageLabel } from "@/lib/supabase/types"
 
@@ -60,44 +60,54 @@ export async function POST(request: Request, context: Context) {
 
   const existingCount = await auth.service.from("case_images").select("id", { count: "exact", head: true }).eq("record_id", id)
   const startOrder = existingCount.count ?? 0
-  const rows = []
 
-  for (const [index, file] of files.entries()) {
-    if (!allowedMimeTypes.includes(file.type)) {
-      return NextResponse.json({ error: "Only PNG, JPEG, and WebP images are supported." }, { status: 400 })
-    }
+  let uploadRows
 
-    if (file.size > 10 * 1024 * 1024) {
-      return NextResponse.json({ error: "Images must be 10 MB or smaller." }, { status: 400 })
-    }
+  try {
+    uploadRows = await Promise.all(
+      files.map(async (file, index) => {
+        if (!allowedMimeTypes.includes(file.type)) {
+          throw new Error("Only PNG, JPEG, and WebP images are supported.")
+        }
 
-    const label = allowedLabels.includes(labels[index] as CaseImageLabel)
-      ? (labels[index] as CaseImageLabel)
-      : index === 0
-        ? "front"
-        : "other"
-    const sortOrder = startOrder + index
-    const storagePath = `${auth.profile.organization_id}/${record.case_id}/${id}/${sortOrder}-${label}.${extFromMimeType(file.type)}`
-    const { error: storageError } = await auth.service.storage.from("studies").upload(storagePath, file, {
-      contentType: file.type,
-      upsert: true,
-    })
+        if (file.size > 10 * 1024 * 1024) {
+          throw new Error("Images must be 10 MB or smaller.")
+        }
 
-    if (storageError) {
-      return NextResponse.json({ error: storageError.message }, { status: 500 })
-    }
+        const label = allowedLabels.includes(labels[index] as CaseImageLabel)
+          ? (labels[index] as CaseImageLabel)
+          : index === 0
+            ? "front"
+            : "other"
+        const sortOrder = startOrder + index
+        const storagePath = `${auth.profile.organization_id}/${record.case_id}/${id}/${sortOrder}-${label}.${extFromMimeType(file.type)}`
+        const { error: storageError } = await auth.service.storage.from("studies").upload(storagePath, file, {
+          contentType: file.type,
+          upsert: true,
+        })
 
-    rows.push({
-      record_id: id,
-      label,
-      label_note: labelNotes[index]?.trim() || null,
-      storage_path: storagePath,
-      image_mime_type: file.type,
-      sort_order: sortOrder,
-    })
+        if (storageError) {
+          throw new Error(storageError.message)
+        }
+
+        return {
+          record_id: id,
+          label,
+          label_note: labelNotes[index]?.trim() || null,
+          storage_path: storagePath,
+          image_mime_type: file.type,
+          sort_order: sortOrder,
+        }
+      }),
+    )
+  } catch (uploadError) {
+    return NextResponse.json(
+      { error: uploadError instanceof Error ? uploadError.message : "Could not upload images." },
+      { status: 400 },
+    )
   }
 
-  const { error: insertError } = await auth.service.from("case_images").insert(rows)
+  const { error: insertError } = await auth.service.from("case_images").insert(uploadRows)
   if (insertError) {
     return NextResponse.json({ error: insertError.message }, { status: 500 })
   }
@@ -111,5 +121,5 @@ export async function POST(request: Request, context: Context) {
     return NextResponse.json({ error: reloadError?.message ?? "Could not reload record." }, { status: 500 })
   }
 
-  return NextResponse.json({ record: await mapRecordRow(auth.service, reloaded) })
+  return NextResponse.json({ record: await mapRecordRowWithUrls(auth.service, reloaded) })
 }

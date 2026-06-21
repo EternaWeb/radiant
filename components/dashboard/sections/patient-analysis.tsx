@@ -34,6 +34,7 @@ import { useApp } from "@/lib/app-context"
 import { formatFindingLabel, formatFindingZone } from "@/lib/lung-zones"
 import { formatClinicalRole } from "@/lib/roles"
 import { useCases } from "@/lib/use-cases"
+import { loadDepartmentsCached } from "@/lib/use-departments"
 import type { CaseAssignmentRole, CaseImageLabel, ClinicalRole } from "@/lib/supabase/types"
 import type { CaseRecordView, CaseView } from "@/lib/cases"
 import { BreadcrumbNav } from "../breadcrumb-nav"
@@ -86,7 +87,7 @@ type DepartmentsResponse = {
 
 export function PatientAnalysis() {
   const { selectedCase, selectedRecordId, setSelectedCase, setSelectedRecordId, openCase, isAdmin } = useApp()
-  const { cases, loading, error, refresh } = useCases()
+  const { cases, loading, error, refresh, patchCase, removeCase, prependCase } = useCases()
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [showCaseForm, setShowCaseForm] = useState(false)
@@ -121,9 +122,9 @@ export function PatientAnalysis() {
 
     if (response.ok && payload.case) {
       setSelectedCase(payload.case)
+      patchCase(payload.case)
     }
 
-    await refresh({ silent: true })
     return payload.case ?? null
   }
 
@@ -165,7 +166,7 @@ export function PatientAnalysis() {
 
       openCase(casePayload.case)
       setShowCaseForm(false)
-      await refresh()
+      prependCase(casePayload.case)
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not create case.")
     } finally {
@@ -255,7 +256,7 @@ export function PatientAnalysis() {
       setShowManageModal(false)
       setSelectedCase(null)
       setSelectedRecordId(null)
-      await refresh()
+      removeCase(activeCase.id)
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not delete case.")
     } finally {
@@ -275,7 +276,7 @@ export function PatientAnalysis() {
       setShowManageModal(false)
       setSelectedCase(null)
       setSelectedRecordId(null)
-      await refresh()
+      await refresh({ silent: true })
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not delete client.")
     } finally {
@@ -298,7 +299,7 @@ export function PatientAnalysis() {
       if (!response.ok || !payload.case) throw new Error(payload.error ?? "Could not assign staff.")
 
       setSelectedCase(payload.case)
-      await refresh({ silent: true })
+      patchCase(payload.case)
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not assign staff.")
     } finally {
@@ -321,7 +322,7 @@ export function PatientAnalysis() {
       if (!response.ok || !payload.case) throw new Error(payload.error ?? "Could not remove staff assignment.")
 
       setSelectedCase(payload.case)
-      await refresh({ silent: true })
+      patchCase(payload.case)
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not remove staff assignment.")
     } finally {
@@ -1119,9 +1120,8 @@ function AssignStaffModal({
       setLoading(true)
       setError(null)
       try {
-        const response = await fetch("/api/departments")
-        const payload = (await response.json()) as DepartmentsResponse
-        if (!response.ok) throw new Error(payload.error ?? "Could not load staff directory.")
+        const payload = await loadDepartmentsCached()
+        if (payload.error) throw new Error(payload.error)
         if (!cancelled) setDepartments(payload.departments ?? [])
       } catch (error) {
         if (!cancelled) setError(error instanceof Error ? error.message : "Could not load staff directory.")

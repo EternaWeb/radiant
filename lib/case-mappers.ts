@@ -82,11 +82,45 @@ function first<T>(value: T[] | T | null | undefined): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value
 }
 
-async function signedUrl(service: SupabaseClient<Database>, path: string | null | undefined) {
-  if (!path) return null
+type SignedUrlMap = Map<string, string>
 
-  const { data } = await service.storage.from("studies").createSignedUrl(path, 60 * 60)
-  return data?.signedUrl ?? null
+async function buildSignedUrlMap(service: SupabaseClient<Database>, paths: string[]): Promise<SignedUrlMap> {
+  const unique = [...new Set(paths.filter(Boolean))]
+  if (unique.length === 0) return new Map()
+
+  const { data } = await service.storage.from("studies").createSignedUrls(unique, 60 * 60)
+  const map: SignedUrlMap = new Map()
+
+  for (const item of data ?? []) {
+    if (item.path && item.signedUrl) {
+      map.set(item.path, item.signedUrl)
+    }
+  }
+
+  return map
+}
+
+function collectImagePaths(rows: CaseRow[]): string[] {
+  const paths: string[] = []
+
+  for (const caseRow of rows) {
+    for (const record of caseRow.case_records ?? []) {
+      for (const image of record.case_images ?? []) {
+        if (image.storage_path) paths.push(image.storage_path)
+      }
+    }
+  }
+
+  return paths
+}
+
+function collectRecordImagePaths(record: RecordRow): string[] {
+  return (record.case_images ?? []).map((image) => image.storage_path).filter(Boolean) as string[]
+}
+
+function resolveSignedUrl(urlMap: SignedUrlMap | undefined, path: string | null | undefined) {
+  if (!path) return null
+  return urlMap?.get(path) ?? null
 }
 
 export function mapClientRow(client: ClientRecord): ClientView {
@@ -112,29 +146,24 @@ export function mapClientRows(rows: ClientRow[]): ClientView[] {
   return rows.map(mapClientRow)
 }
 
-async function mapImage(service: SupabaseClient<Database>, image: CaseImageRecord): Promise<CaseImageView> {
+function mapImage(image: CaseImageRecord, urlMap?: SignedUrlMap): CaseImageView {
   return {
     id: image.id,
     label: image.label,
     labelNote: image.label_note,
     storagePath: image.storage_path,
-    image: (await signedUrl(service, image.storage_path)) ?? "/placeholder.svg",
+    image: resolveSignedUrl(urlMap, image.storage_path) ?? "/placeholder.svg",
     mimeType: image.image_mime_type,
     sortOrder: image.sort_order,
   }
 }
 
-export async function mapRecordRow(
-  service: SupabaseClient<Database>,
-  record: RecordRow,
-): Promise<CaseRecordView> {
+export function mapRecordRow(record: RecordRow, urlMap?: SignedUrlMap): CaseRecordView {
   const report = first(record.case_record_reports)
-  const images = await Promise.all(
-    (record.case_images ?? [])
-      .slice()
-      .sort((a, b) => a.sort_order - b.sort_order)
-      .map((image) => mapImage(service, image)),
-  )
+  const images = (record.case_images ?? [])
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((image) => mapImage(image, urlMap))
   const findings = (record.case_record_findings ?? [])
     .slice()
     .sort((a, b) => b.confidence - a.confidence)
@@ -188,28 +217,34 @@ function mapAssignment(row: AssignmentRow): CaseAssignmentView {
 }
 
 export async function mapCaseRows(service: SupabaseClient<Database>, rows: CaseRow[]): Promise<CaseView[]> {
-  return Promise.all(
-    rows.map(async (caseRow) => {
-      const records = await Promise.all(
-        (caseRow.case_records ?? [])
-          .slice()
-          .sort((a, b) => a.record_number - b.record_number)
-          .map((record) => mapRecordRow(service, record)),
-      )
+  const urlMap = await buildSignedUrlMap(service, collectImagePaths(rows))
 
-      return {
-        id: caseRow.id,
-        title: caseRow.title,
-        status: caseRow.status,
-        departmentId: caseRow.department_id,
-        client: caseRow.clients ? mapClientRow(caseRow.clients) : mapClientRow(fallbackClient(caseRow)),
-        records,
-        assignments: (caseRow.case_assignments ?? []).map(mapAssignment),
-        createdAt: caseRow.created_at,
-        updatedAt: caseRow.updated_at,
-      }
-    }),
-  )
+  return rows.map((caseRow) => {
+    const records = (caseRow.case_records ?? [])
+      .slice()
+      .sort((a, b) => a.record_number - b.record_number)
+      .map((record) => mapRecordRow(record, urlMap))
+
+    return {
+      id: caseRow.id,
+      title: caseRow.title,
+      status: caseRow.status,
+      departmentId: caseRow.department_id,
+      client: caseRow.clients ? mapClientRow(caseRow.clients) : mapClientRow(fallbackClient(caseRow)),
+      records,
+      assignments: (caseRow.case_assignments ?? []).map(mapAssignment),
+      createdAt: caseRow.created_at,
+      updatedAt: caseRow.updated_at,
+    }
+  })
+}
+
+export async function mapRecordRowWithUrls(
+  service: SupabaseClient<Database>,
+  record: RecordRow,
+): Promise<CaseRecordView> {
+  const urlMap = await buildSignedUrlMap(service, collectRecordImagePaths(record))
+  return mapRecordRow(record, urlMap)
 }
 
 function fallbackClient(caseRow: CaseRow): ClientRecord {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { isApiError, requireCompletedProfile } from "@/lib/api-auth"
 import { canAccessRecord } from "@/lib/case-access"
-import { mapRecordRow } from "@/lib/case-mappers"
+import { mapRecordRowWithUrls } from "@/lib/case-mappers"
 import { recordSelect } from "@/lib/case-queries"
 
 type Context = {
@@ -27,5 +27,5 @@ export async function GET(_request: Request, context: Context) {
     return NextResponse.json({ error: error?.message ?? "Record not found." }, { status: 404 })
   }
 
-  return NextResponse.json({ record: await mapRecordRow(auth.service, data) })
+  return NextResponse.json({ record: await mapRecordRowWithUrls(auth.service, data) })
 }

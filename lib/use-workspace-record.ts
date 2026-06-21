@@ -22,30 +22,23 @@ export function useWorkspaceRecord(recordId: string): WorkspaceRecordState {
     setError(null)
 
     try {
-      const recordResponse = await fetch(`/api/records/${recordId}`)
-      const recordPayload = (await recordResponse.json()) as { record?: CaseRecordView; error?: string }
+      const response = await fetch(`/api/records/${recordId}/workspace`)
+      const payload = (await response.json()) as {
+        record?: CaseRecordView
+        case?: CaseView
+        error?: string
+      }
 
-      if (!recordResponse.ok || !recordPayload.record) {
-        setError(recordPayload.error ?? "Record not found.")
+      if (!response.ok || !payload.record || !payload.case) {
+        setError(payload.error ?? "Record not found.")
         setCaseView(null)
         setRecord(null)
         setLoading(false)
         return
       }
 
-      const caseResponse = await fetch(`/api/cases/${recordPayload.record.caseId}`)
-      const casePayload = (await caseResponse.json()) as { case?: CaseView; error?: string }
-
-      if (!caseResponse.ok || !casePayload.case) {
-        setError(casePayload.error ?? "Case not found.")
-        setCaseView(null)
-        setRecord(null)
-        setLoading(false)
-        return
-      }
-
-      const matchedRecord = casePayload.case.records.find((item) => item.id === recordId) ?? recordPayload.record
-      setCaseView(casePayload.case)
+      const matchedRecord = payload.case.records.find((item) => item.id === recordId) ?? payload.record
+      setCaseView(payload.case)
       setRecord(matchedRecord)
       setLoading(false)
     } catch (loadError) {

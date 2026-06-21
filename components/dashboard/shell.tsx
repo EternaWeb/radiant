@@ -17,6 +17,7 @@ import { RadiantLogo } from "@/components/radiant-logo"
 import { OrgLogo } from "@/components/org-logo"
 import { UserAvatar } from "@/components/user-avatar"
 import { useApp, type Section } from "@/lib/app-context"
+import { DashboardDataProvider } from "@/lib/dashboard-data"
 import { formatClinicalRole } from "@/lib/roles"
 import { useAlerts } from "@/lib/use-studies"
 import { DashboardHome } from "./sections/home"
@@ -50,7 +51,7 @@ const titles: Record<Section, string> = {
   settings: "Settings",
 }
 
-export function Shell() {
+function ShellContent() {
   const { section, setSection, profile, organization } = useApp()
   const { alerts } = useAlerts()
   const displayName = profile?.full_name ?? "Radiant user"
@@ -137,5 +138,13 @@ export function Shell() {
         </main>
       </div>
     </div>
+  )
+}
+
+export function Shell() {
+  return (
+    <DashboardDataProvider>
+      <ShellContent />
+    </DashboardDataProvider>
   )
 }
