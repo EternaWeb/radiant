@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Database, Cpu, Bell, LogOut, UserRound, Save, Camera, Building2 } from "lucide-react"
+import { Database, Cpu, Bell, LogOut, UserRound, Save, Camera, Building2, Plus } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -29,8 +29,11 @@ function Toggle({ defaultOn = true }: { defaultOn?: boolean }) {
 
 export function SettingsView() {
   const router = useRouter()
-  const { hospital, role, profile, organization, setProfile, setOrganization, isAdmin, resetAuthState } = useApp()
+  const { hospital, role, profile, organization, setProfile, setOrganization, setDepartment, setHospital, isAdmin, resetAuthState } = useApp()
   const [phone, setPhone] = useState(profile?.phone ?? "")
+  const [newWorkspaceName, setNewWorkspaceName] = useState("")
+  const [newWorkspaceDepartment, setNewWorkspaceDepartment] = useState("Radiology")
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -103,6 +106,41 @@ export function SettingsView() {
     router.refresh()
   }
 
+  async function createWorkspace() {
+    if (newWorkspaceName.trim().length < 2) return
+    setCreatingWorkspace(true)
+    setMessage(null)
+
+    try {
+      const response = await fetch("/api/organizations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hospitalName: newWorkspaceName.trim(),
+          departmentName: newWorkspaceDepartment.trim() || "Radiology",
+        }),
+      })
+      const result = await response.json()
+
+      if (!response.ok || !result.profile || !result.organization || !result.department) {
+        setMessage(result.error ?? "Could not create workspace.")
+        return
+      }
+
+      setProfile(result.profile)
+      setOrganization(result.organization)
+      setDepartment(result.department)
+      setHospital({ name: result.organization.name, department: result.department.name })
+      setNewWorkspaceName("")
+      setMessage(`Switched to ${result.organization.name}.`)
+      router.refresh()
+    } catch {
+      setMessage("Could not create workspace.")
+    } finally {
+      setCreatingWorkspace(false)
+    }
+  }
+
   return (
     <div className="flex max-w-3xl flex-col gap-5">
       <Card>
@@ -165,6 +203,48 @@ export function SettingsView() {
           {message && <p className="mt-3 text-sm text-muted-foreground">{message}</p>}
         </CardContent>
       </Card>
+
+      {isAdmin && (
+        <Card>
+          <CardContent className="p-5">
+            <h3 className="mb-4 flex items-center gap-2 font-semibold">
+              <Plus className="h-4 w-4 text-accent-blue" /> Create new workspace
+            </h3>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Spin up another hospital workspace. You will become its admin and switch into the new workspace immediately.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-muted-foreground">Hospital name</span>
+                <input
+                  value={newWorkspaceName}
+                  onChange={(event) => setNewWorkspaceName(event.target.value)}
+                  placeholder="e.g. City General Hospital"
+                  className="h-10 rounded-lg border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-accent-blue"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-muted-foreground">Your department</span>
+                <input
+                  value={newWorkspaceDepartment}
+                  onChange={(event) => setNewWorkspaceDepartment(event.target.value)}
+                  placeholder="e.g. Radiology"
+                  className="h-10 rounded-lg border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-accent-blue"
+                />
+              </label>
+            </div>
+            <Button
+              className="mt-4"
+              onClick={() => void createWorkspace()}
+              disabled={creatingWorkspace || newWorkspaceName.trim().length < 2}
+              data-icon="inline-start"
+            >
+              <Plus data-icon="inline-start" />
+              {creatingWorkspace ? "Creating..." : "Create workspace"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {isAdmin && (
         <Card>
