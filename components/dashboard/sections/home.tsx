@@ -6,7 +6,8 @@ import { Badge, riskVariant } from "@/components/ui/badge"
 import { UserAvatar } from "@/components/user-avatar"
 import { OrgLogo } from "@/components/org-logo"
 import { useApp } from "@/lib/app-context"
-import { findingsToHeatmapBoxes } from "@/lib/lung-zones"
+import { findingsToGradientLayers, findingsToHeatmapBoxes } from "@/lib/lung-zones"
+import { resolveOverlayFindings } from "@/lib/overlay-findings"
 import { useCases } from "@/lib/use-cases"
 import { useAlerts } from "@/lib/use-studies"
 import { HeatmapViewer } from "../heatmap-viewer"
@@ -32,7 +33,9 @@ export function DashboardHome() {
   const recent = cases.slice(0, 4)
   const records = cases.flatMap((caseView) => caseView.records.map((record) => ({ caseView, record })))
   const showcase = records.find((item) => item.record.risk >= 70) ?? records[0] ?? null
-  const showcaseBoxes = showcase ? findingsToHeatmapBoxes(showcase.record.findings) : []
+  const showcaseOverlay = showcase ? resolveOverlayFindings(showcase.record) : { findings: [], isDemo: false }
+  const showcaseBoxes = findingsToHeatmapBoxes(showcaseOverlay.findings)
+  const showcaseGradients = findingsToGradientLayers(showcaseOverlay.findings)
   const completed = records.filter((item) => item.record.rawStatus === "analyzed" || item.record.rawStatus === "critical")
   const highRiskCount = records.filter((item) => item.record.risk >= 70).length
   const kpis: Kpi[] = [
@@ -146,7 +149,13 @@ export function DashboardHome() {
             </div>
             {showcase ? (
               <>
-                <HeatmapViewer image={showcase.record.image} heatmapImage={showcase.record.heatmapImage} boxes={showcaseBoxes} />
+                <HeatmapViewer
+                  image={showcase.record.image}
+                  heatmapImage={showcase.record.heatmapImage}
+                  boxes={showcaseBoxes}
+                  gradients={showcaseGradients}
+                  isDemo={showcaseOverlay.isDemo}
+                />
                 <button
                   onClick={() => openCase(showcase.caseView, showcase.record.id)}
                   className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background py-2.5 text-sm font-medium transition-colors hover:bg-muted"

@@ -8,9 +8,11 @@ import { Badge, riskVariant } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { CaseTimeline } from "@/components/dashboard/case-timeline"
+import { HeatmapViewer } from "@/components/dashboard/heatmap-viewer"
 import { RiskGauge } from "@/components/dashboard/risk-gauge"
 import { WorkspaceChrome } from "@/components/workspace/workspace-chrome"
-import { formatFindingLabel } from "@/lib/lung-zones"
+import { formatFindingLabel, findingsToGradientLayers, findingsToHeatmapBoxes } from "@/lib/lung-zones"
+import { resolveOverlayFindings } from "@/lib/overlay-findings"
 import { useWorkspaceRecord } from "@/lib/use-workspace-record"
 import { useAlerts } from "@/lib/use-studies"
 import { confidenceLabel } from "@/lib/viewer-utils"
@@ -42,6 +44,10 @@ export function ClinicalWorkspace({ recordId }: { recordId: string }) {
     }
     return Array.from(names.entries()).map(([id, name]) => ({ id, name }))
   }, [caseView])
+
+  const overlaySource = useMemo(() => (record ? resolveOverlayFindings(record) : { findings: [], isDemo: false }), [record])
+  const overlayBoxes = useMemo(() => findingsToHeatmapBoxes(overlaySource.findings), [overlaySource.findings])
+  const overlayGradients = useMemo(() => findingsToGradientLayers(overlaySource.findings), [overlaySource.findings])
 
   async function loadDepartments() {
     if (departmentsLoaded) return
@@ -149,6 +155,26 @@ export function ClinicalWorkspace({ recordId }: { recordId: string }) {
                     <Badge variant="muted">{record.status}</Badge>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="font-semibold">AI overlay preview</h3>
+                  {overlaySource.isDemo && (
+                    <Badge variant="warning" className="text-[10px] uppercase">
+                      Demo
+                    </Badge>
+                  )}
+                </div>
+                <HeatmapViewer
+                  image={record.image}
+                  boxes={overlayBoxes}
+                  gradients={overlayGradients}
+                  isDemo={overlaySource.isDemo}
+                  imageClassName="block max-h-72 w-full object-contain select-none"
+                />
               </CardContent>
             </Card>
 

@@ -13,6 +13,7 @@ import {
   type CaseView,
   type ClientView,
 } from "@/lib/cases"
+import type { GptVisionAnalysis } from "@/lib/gpt-vision"
 import { modalityLabel, statusLabel } from "@/lib/studies"
 import type {
   CaseAssignment,
@@ -161,6 +162,7 @@ export async function mapRecordRow(
     image: topImage(images),
     heatmapImage: null,
     findings,
+    rawFindings: (record.raw_findings as GptVisionAnalysis["raw"] | null) ?? null,
     summary:
       record.summary ??
       report?.summary ??

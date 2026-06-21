@@ -10,6 +10,7 @@ import { CaseTimeline } from "@/components/dashboard/case-timeline"
 import { DiagnosticImageViewer } from "@/components/workspace/diagnostic-image-viewer"
 import { ViewerToolbar } from "@/components/workspace/viewer-toolbar"
 import { formatFindingLabel, formatFindingZone, findingsToGradientLayers, findingsToHeatmapBoxes } from "@/lib/lung-zones"
+import { resolveOverlayFindings } from "@/lib/overlay-findings"
 import { useWorkspaceRecord } from "@/lib/use-workspace-record"
 import { confidenceLabel, priorRecordImage, useViewerControls } from "@/lib/viewer-utils"
 
@@ -38,8 +39,9 @@ export function DiagnosticViewer({ recordId }: { recordId: string }) {
     onPointerUp,
   } = useViewerControls()
 
-  const boxes = useMemo(() => (record ? findingsToHeatmapBoxes(record.findings) : []), [record])
-  const gradients = useMemo(() => (record ? findingsToGradientLayers(record.findings) : []), [record])
+  const overlaySource = useMemo(() => (record ? resolveOverlayFindings(record) : { findings: [], isDemo: false }), [record])
+  const boxes = useMemo(() => findingsToHeatmapBoxes(overlaySource.findings), [overlaySource.findings])
+  const gradients = useMemo(() => findingsToGradientLayers(overlaySource.findings), [overlaySource.findings])
   const previousStudyImage = useMemo(
     () => (caseView && record ? priorRecordImage(caseView.records, record.recordNumber) : null),
     [caseView, record],
@@ -140,6 +142,7 @@ export function DiagnosticViewer({ recordId }: { recordId: string }) {
           setShareOpen((open) => !open)
           void loadDepartments()
         }}
+        isDemoOverlay={overlaySource.isDemo}
       />
 
       {shareOpen && (
@@ -211,7 +214,12 @@ export function DiagnosticViewer({ recordId }: { recordId: string }) {
                     )
                   })
                 ) : (
-                  <p className="text-sm text-muted-foreground">No AI findings yet. Run analysis from the dashboard.</p>
+                  <p className="text-sm text-muted-foreground">No AI findings yet. Run analysis from the Imaging section.</p>
+                )}
+                {overlaySource.isDemo && (
+                  <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+                    Showing illustrative demo overlay until AI analysis runs on this record.
+                  </p>
                 )}
               </div>
             )}
@@ -317,6 +325,7 @@ export function DiagnosticViewer({ recordId }: { recordId: string }) {
             gradients={gradients}
             controls={controls}
             highlightedFindingId={highlightedFindingId}
+            isDemo={overlaySource.isDemo}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}

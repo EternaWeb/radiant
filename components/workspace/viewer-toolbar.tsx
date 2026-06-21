@@ -17,6 +17,7 @@ type ViewerToolbarProps = {
   onPatch: (partial: Partial<ViewerControlsState>) => void
   onDownloadReport: () => void
   onShareClick: () => void
+  isDemoOverlay?: boolean
 }
 
 export function ViewerToolbar({
@@ -30,6 +31,7 @@ export function ViewerToolbar({
   onPatch,
   onDownloadReport,
   onShareClick,
+  isDemoOverlay = false,
 }: ViewerToolbarProps) {
   return (
     <div className="border-b border-border bg-card">
@@ -87,6 +89,7 @@ export function ViewerToolbar({
             className="rounded border-border"
           />
           <span className="text-xs">AI Findings</span>
+          {isDemoOverlay && <span className="text-[10px] uppercase tracking-wide text-amber-600">Demo</span>}
         </label>
         <label className="inline-flex items-center gap-2">
           <input

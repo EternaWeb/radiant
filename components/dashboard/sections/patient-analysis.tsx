@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react"
 import {
   ChevronRight,
   ClipboardList,
@@ -37,6 +37,9 @@ import { useCases } from "@/lib/use-cases"
 import type { CaseAssignmentRole, CaseImageLabel, ClinicalRole } from "@/lib/supabase/types"
 import type { CaseRecordView, CaseView } from "@/lib/cases"
 import { BreadcrumbNav } from "../breadcrumb-nav"
+import { HeatmapViewer } from "../heatmap-viewer"
+import { findingsToGradientLayers, findingsToHeatmapBoxes } from "@/lib/lung-zones"
+import { resolveOverlayFindings } from "@/lib/overlay-findings"
 
 const inputClass =
   "h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-accent-blue"
@@ -818,6 +821,9 @@ function RecordAnalysis({
       .map((finding) => `${formatFindingLabel(finding.label)} (${formatFindingZone(finding.zone)}, ${finding.confidence}%)`)
       .join("; ") || "Awaiting AI findings."
   const topFinding = record.findings[0]
+  const overlaySource = useMemo(() => resolveOverlayFindings(record), [record])
+  const overlayBoxes = useMemo(() => findingsToHeatmapBoxes(overlaySource.findings), [overlaySource.findings])
+  const overlayGradients = useMemo(() => findingsToGradientLayers(overlaySource.findings), [overlaySource.findings])
 
   useEffect(() => {
     setFocusedImageId(record.images[0]?.id ?? null)
@@ -972,11 +978,18 @@ function RecordAnalysis({
               </button>
             )}
           </div>
-          <div className="overflow-hidden rounded-sm bg-white">
+          <div className="overflow-hidden rounded-sm">
             {focusedImage ? (
-              <img src={focusedImage.image} alt={`${focusedImage.label} view`} className="aspect-square w-full object-contain" />
+              <HeatmapViewer
+                image={focusedImage.image}
+                boxes={overlayBoxes}
+                gradients={overlayGradients}
+                isDemo={overlaySource.isDemo}
+                imageClassName="block aspect-square w-full object-contain select-none"
+                className="rounded-sm border-0 shadow-none"
+              />
             ) : (
-              <div className="flex aspect-square items-center justify-center border border-dashed border-border text-muted-foreground">
+              <div className="flex aspect-square items-center justify-center border border-dashed border-border bg-white text-muted-foreground">
                 No image uploaded
               </div>
             )}

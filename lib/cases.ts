@@ -8,6 +8,7 @@ import type {
   StudyModality,
   StudyStatus,
 } from "@/lib/supabase/types"
+import type { GptVisionAnalysis } from "@/lib/gpt-vision"
 import { modalityLabel, statusLabel } from "@/lib/studies"
 
 export type ClinicalChecks = {
@@ -68,6 +69,7 @@ export type CaseRecordView = {
   image: string
   heatmapImage: string | null
   findings: CaseFindingView[]
+  rawFindings: GptVisionAnalysis["raw"] | null
   summary: string
   comparison: string
   recommendation: string
