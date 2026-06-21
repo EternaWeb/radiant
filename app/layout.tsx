@@ -14,22 +14,24 @@ export const metadata: Metadata = {
   description:
     'AI-powered medical imaging analysis platform for radiologists, physicians, and emergency teams.',
   generator: 'v0.app',
+  manifest: '/favicons/site.webmanifest',
   icons: {
     icon: [
+      { url: '/favicons/favicon.ico', sizes: 'any' },
+      { url: '/favicons/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicons/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+    ],
+    apple: '/favicons/apple-touch-icon.png',
+    other: [
       {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
+        rel: 'android-chrome-192x192',
+        url: '/favicons/android-chrome-192x192.png',
       },
       {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
+        rel: 'android-chrome-512x512',
+        url: '/favicons/android-chrome-512x512.png',
       },
     ],
-    apple: '/apple-icon.png',
   },
 }
 
